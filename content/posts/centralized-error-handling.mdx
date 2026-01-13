@@ -1,0 +1,428 @@
+---
+title: "HOC와 미들웨어로 구축하는 중앙집중식 오류 처리"
+description: "Next.js SSR 환경에서 HOC 패턴과 미들웨어 헤더 전파를 활용하여 분산된 오류 처리를 중앙집중화하고 일관된 사용자 경험을 구현한 여정을 공유합니다."
+date: "2025-01-06"
+tags: ["next.js", "ssr", "middleware", "error-handling"]
+slug: "centralized-error-handling"
+coverImage: "/images/posts/centralized-error-handling/cover.png"
+---
+
+![커버 이미지](/images/posts/centralized-error-handling/cover.png)
+
+안녕하세요! 프론트엔드 개발자입니다. 오늘은 Next.js Server-Side Rendering (SSR) 환경에서 겪었던 복잡한 오류 처리 문제를 해결하고, 사용자에게 일관되고 명확한 피드백을 제공하기 위해 적용했던 전략들을 공유하고자 합니다. 특히 결제 서비스와 같은 중요한 애플리케이션에서는 사용자 경험이 매우 중요하며, 오류 상황에서도 사용자가 혼란을 겪지 않도록 견고한 오류 처리가 필수적입니다. 이 글을 통해 Next.js 개발에 도움이 되셨으면 좋겠습니다.
+
+## 문제의식: 분산된 오류 처리와 미들웨어의 한계
+
+저희 서비스는 Next.js 기반의 SSR 애플리케이션으로, 사용자가 페이지에 진입하는 과정에서 다양한 서버 측 오류가 발생할 수 있습니다. 예를 들어, 데이터 페칭 실패, 권한 없음 등 여러 시나리오가 있죠. 기존에는 이러한 오류들을 각 페이지 컴포넌트 내의 `try-catch` 블록에서 개별적으로 처리하고 있었습니다.
+
+이 방식은 몇 가지 문제점을 야기했습니다.
+
+1.  **코드 중복**: 각 페이지마다 거의 동일한 `try-catch` 로직이 반복되어 코드 중복이 심했습니다.
+2.  **유지보수 어려움**: 오류 처리 로직을 수정하려면 모든 페이지를 수정해야 하는 번거로움이 있었습니다.
+3.  **일관성 부족**: 페이지마다 오류 메시지나 처리 방식이 미묘하게 달라질 위험이 있었습니다.
+
+또한, 미들웨어에서 사용자 인증 여부를 확인하는 로직이 있었는데, 인증 쿠키가 없을 경우 단순히 로그인 페이지로 리다이렉트하는 방식이었습니다. 이 경우 사용자는 보고 있던 페이지를 잃게 되고, 왜 로그인 페이지로 이동했는지 명확한 안내를 받기 어려워 사용자 경험이 저해될 수 있었습니다.
+
+이러한 문제들을 해결하기 위해, Next.js의 강력한 기능들을 활용하여 중앙집중식 오류 처리 시스템을 구축하고, 미들웨어에서 발생한 오류까지 SSR 페이지 컴포넌트로 안전하게 전파하는 전략을 세우게 되었습니다.
+
+## 개념 설명: SSR, 미들웨어, HOC 그리고 헤더
+
+이번 개선 작업의 핵심은 Next.js SSR의 특성을 이해하고, 미들웨어, HOC(Higher-Order Component), HTTP 헤더와 같은 기술 요소들을 유기적으로 연결하는 것이었습니다. 각 기술 개념이 어떻게 활용되었는지 먼저 살펴보겠습니다.
+
+### Next.js Server-Side Rendering (SSR)
+
+Next.js의 SSR은 사용자의 요청이 들어올 때마다 서버에서 페이지의 HTML을 생성하여 클라이언트에게 전송하는 방식입니다. 이 방식은 초기 페이지 로딩 속도를 향상시키고, 검색 엔진 최적화(SEO)에 유리하다는 장점이 있습니다. 페이지 컴포넌트 내에서 `getServerSideProps`와 같은 비동기 함수를 통해 서버 측 데이터를 미리 가져와 HTML에 주입할 수 있습니다.
+저희 서비스는 결제와 관련된 중요한 정보를 다루기 때문에, SSR을 통해 초기 로딩 시 필요한 데이터를 안전하게 가져오고 사용자에게 빠르게 페이지를 보여주는 것이 중요합니다. 따라서 SSR 단계에서 발생할 수 있는 모든 오류를 효과적으로 처리하는 것이 필수적이었습니다. 이 과정에서 서버에서 실행되는 컴포넌트 내부의 데이터 페칭 오류나, 심지어 미들웨어 단계에서 걸러진 인증 오류까지 사용자에게 전달하는 메커니즘이 필요했습니다.
+
+### Next.js Middleware
+
+Next.js Middleware는 요청이 서버의 다른 라우트로 전달되기 전에 코드를 실행할 수 있는 강력한 기능입니다. 이를 통해 들어오는 요청을 기반으로 응답을 재작성(rewrite)하거나, 리디렉션하거나, 요청/응답 헤더를 수정하는 등의 작업을 수행할 수 있습니다. 인증, A/B 테스트, 로컬라이제이션 등 다양한 용도로 활용됩니다.
+저희는 미들웨어를 사용하여 사용자의 세션 쿠키 존재 여부를 확인하고, 인증되지 않은 사용자에게는 적절한 오류 정보를 SSR 컴포넌트로 전달하는 역할을 부여했습니다. 특히 `NextResponse.rewrite`와 `NextResponse.redirect`의 차이점을 이해하는 것이 중요했습니다. `redirect`는 브라우저의 URL 자체를 변경하여 사용자를 다른 페이지로 이동시키지만, `rewrite`는 브라우저의 URL을 유지한 채 서버 내부적으로 다른 경로로 요청을 처리합니다. 인증 오류 시 사용자가 보고 있던 URL을 유지하면서 오류를 표시하는 것이 더 나은 사용자 경험을 제공할 것이라고 판단하여 `rewrite`를 선택했습니다.
+
+### Higher-Order Component (HOC)
+
+Higher-Order Component(HOC)는 React에서 컴포넌트 로직을 재사용하기 위한 패턴입니다. 컴포넌트를 인자로 받아 새로운 컴포넌트를 반환하는 함수 형태로, 여러 컴포넌트에 공통적으로 적용되어야 하는 로직(예: 인증, 데이터 구독, 에러 처리)을 추상화하고 재사용 가능하게 만듭니다. 이는 코드 중복을 줄이고 관심사 분리(Separation of Concerns)를 가능하게 하여 유지보수성을 높여줍니다.
+저희는 페이지 컴포넌트의 오류 처리 로직을 중앙집중화하기 위해 `withPageErrorHandling`이라는 HOC를 도입했습니다. 이 HOC는 각 페이지 컴포넌트가 렌더링되기 전에 오류를 감지하고, 이를 공통 오류 디스플레이 컴포넌트로 전달하는 역할을 수행합니다. 이를 통해 개별 페이지 컴포넌트는 데이터 페칭과 UI 렌더링이라는 본연의 역할에만 집중할 수 있게 됩니다.
+
+### HTTP Headers
+
+HTTP 헤더는 클라이언트와 서버 간의 HTTP 요청 또는 응답 메시지에 추가적인 컨텍스트와 메타데이터를 전달하는 필드입니다. 본 사례에서는 `X-Error-Status`와 `X-Error-Message`와 같은 커스텀 헤더를 사용하여 미들웨어에서 발생한 오류 정보를 SSR 컴포넌트로 안전하게 전파하는 "통신 채널" 역할을 담당했습니다.
+미들웨어에서 인증 오류를 감지했을 때, 단순히 `rewrite`만 하는 것이 아니라 이 커스텀 헤더에 오류 상태 코드와 메시지를 인코딩하여 담아 보냅니다. SSR 페이지 컴포넌트에서는 이 헤더를 읽어 오류 정보를 파싱하고, 마치 페이지 내부에서 발생한 오류인 것처럼 처리하여 사용자에게 일관된 방식으로 오류를 표시할 수 있게 됩니다.
+
+## 구현 포인트: 중앙집중식 오류 처리의 여정
+
+이제 실제 코드 변경을 통해 어떻게 이러한 시스템을 구축했는지 단계별로 살펴보겠습니다.
+
+### 1. 커스텀 오류 클래스 정의
+
+먼저, 백엔드 API 오류를 표준화된 형태로 다루기 위한 커스텀 오류 클래스를 정의했습니다.
+
+```typescript
+// src/libs/api/serverApis.ts
+export class BackendApiError extends Error {
+  statusCode: number;
+  errorMessage: string;
+
+  constructor(statusCode: number, errorMessage: string) {
+    super(errorMessage);
+    this.name = "BackendApiError";
+    this.statusCode = statusCode;
+    this.errorMessage = errorMessage;
+  }
+}
+```
+
+**코드 해설:**
+`BackendApiError`는 백엔드 API에서 발생하는 오류를 일관된 형태로 처리하기 위한 클래스입니다.
+
+- `statusCode`: HTTP 상태 코드 (예: 401, 404, 500)
+- `errorMessage`: 사용자에게 표시할 오류 메시지
+
+이 클래스를 사용하면 모든 API 오류를 동일한 방식으로 처리할 수 있어, 오류 처리 로직이 단순해집니다.
+
+### 2. `withPageErrorHandling` HOC 구현
+
+가장 먼저, 모든 페이지 컴포넌트에서 재사용할 수 있는 오류 처리 HOC를 구현했습니다. 이 HOC는 페이지 컴포넌트를 래핑하여 발생하는 모든 오류를 중앙집중식으로 처리합니다.
+
+#### 초기 구현 (`src/libs/ssrErrorHandlingUtils.tsx`)
+
+```typescript
+import React from "react";
+import { BackendApiError } from "@/libs/api/serverApis";
+import GlobalErrorDisplay from "@/components/globalErrorDisplay";
+
+export function withPageErrorHandling<P>(
+  WrappedPageComponent: (props: P) => Promise<React.ReactElement>
+) {
+  return async function RenderWrapper(props: P) {
+    try {
+      return await WrappedPageComponent(props);
+    } catch (err: any) {
+      console.log("Error occurred:", err, err instanceof BackendApiError);
+
+      if (err instanceof BackendApiError) {
+        return (
+          <GlobalErrorDisplay
+            error={{
+              statusCode: err.statusCode,
+              errorMessage: err.errorMessage,
+            }}
+          />
+        );
+      }
+      return (
+        <GlobalErrorDisplay
+          error={{
+            statusCode: 500,
+            errorMessage: JSON.stringify({
+              errorCode: 500000,
+              errorMessage: err.message ?? "",
+            }),
+          }}
+        />
+      );
+    }
+  };
+}
+```
+
+**코드 해설:**
+이 HOC는 페이지 컴포넌트를 래핑하여 오류 처리를 중앙집중화합니다.
+
+1.  제네릭 타입 `<P>`를 사용하여 어떤 props 타입을 가진 페이지 컴포넌트든 래핑할 수 있습니다.
+2.  `try` 블록: 래핑된 페이지 컴포넌트(`WrappedPageComponent`)를 실행합니다.
+3.  `catch (err)` 블록: `WrappedPageComponent` 실행 중 발생한 오류를 잡아 `BackendApiError` 인스턴스인지 확인하여 `GlobalErrorDisplay`로 전달하거나, 일반 500 에러로 처리합니다.
+
+이 패턴의 장점은 **한 곳에서 정의한 오류 처리 로직을 모든 페이지에서 재사용**할 수 있다는 것입니다.
+
+### 3. 페이지 컴포넌트에 HOC 적용
+
+이제 구현한 HOC를 실제 페이지 컴포넌트에 적용하여 분산된 `try-catch` 블록을 제거합니다.
+
+#### 변경 전 (`src/app/checkout/page.tsx`)
+
+```typescript
+import { BackendApiError } from "@/libs/api/serverApis";
+import { fetchPaymentRequest } from "@/app/api/payment-requests/route";
+import CheckoutPageComponent from "./components/PaymentCheckoutPage";
+import GlobalErrorDisplay from "@/components/globalErrorDisplay";
+
+type PageProps = {
+  searchParams: Promise<{ requestIdentifier?: string }>;
+};
+
+export default async function PaymentPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = await searchParams;
+  const requestIdentifier = resolvedSearchParams.requestIdentifier;
+
+  try {
+    const { paymentRequest } = await fetchPaymentRequest(
+      requestIdentifier ?? ""
+    );
+
+    return (
+      <CheckoutPageComponent
+        paymentRequest={paymentRequest}
+        requestIdentifier={requestIdentifier}
+      />
+    );
+  } catch (err) {
+    if (err instanceof BackendApiError) {
+      console.error("Unexpected error:", err);
+      return (
+        <GlobalErrorDisplay
+          error={{
+            statusCode: err.statusCode,
+            errorMessage: err.errorMessage,
+          }}
+        />
+      );
+    }
+    return (
+      <GlobalErrorDisplay
+        error={{
+          statusCode: 500,
+          errorMessage: "알 수 없는 에러가 발생했어요.",
+        }}
+      />
+    );
+  }
+}
+```
+
+#### 변경 후 (`src/app/checkout/page.tsx`)
+
+```typescript
+import { withPageErrorHandling } from "@/libs/ssrErrorHandlingUtils";
+import { fetchPaymentRequest } from "@/app/api/payment-requests/route";
+import CheckoutPageComponent from "./components/PaymentCheckoutPage";
+
+type PageProps = {
+  searchParams: Promise<{ requestIdentifier?: string }>;
+};
+
+async function PaymentPage({ searchParams }: PageProps) {
+  const resolvedSearchParams = await searchParams;
+  const requestIdentifier = resolvedSearchParams.requestIdentifier;
+
+  const { paymentRequest } = await fetchPaymentRequest(requestIdentifier ?? "");
+
+  return (
+    <CheckoutPageComponent
+      paymentRequest={paymentRequest}
+      requestIdentifier={requestIdentifier}
+    />
+  );
+}
+
+export default withPageErrorHandling(PaymentPage);
+```
+
+**코드 해설:**
+HOC를 적용한 후의 `PaymentPage`는 훨씬 간결하고 명확해졌습니다.
+
+1.  **try-catch 블록 제거**: 오류 처리 로직이 완전히 사라졌습니다.
+2.  **관심사 분리**: 페이지는 오직 데이터 페칭과 렌더링만 담당합니다.
+3.  **HOC 적용**: `export default withPageErrorHandling(PaymentPage)`로 래핑하여 오류 처리를 위임합니다.
+
+이 패턴을 모든 페이지에 적용하면 **코드 중복을 제거하고 일관된 오류 처리**를 구현할 수 있습니다.
+
+### 4. 미들웨어에서 발생한 오류를 SSR 페이지로 전파
+
+다음 단계는 미들웨어에서 인증 오류를 감지했을 때, 사용자를 강제로 리다이렉트하는 대신, 현재 URL을 유지하면서 SSR 페이지로 오류 정보를 전달하는 것이었습니다. `NextResponse.rewrite`와 커스텀 HTTP 헤더를 활용했습니다.
+
+#### 변경 전 (`src/middleware.ts`의 인증 처리 로직)
+
+```typescript
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+// function hasSessionCookies({ cookies }: NextRequest) {
+//   return cookies.has("auth_token") && cookies.has("session_id") && cookies.has("user_id");
+// }
+
+function isPaymentCallback(path: string) {
+  return path.match(/\/payment\/[^/]+\/(success|fail)/);
+}
+
+export function authenticationMiddleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  if (
+    path.startsWith("/_next") ||
+    path.startsWith("/api") ||
+    isPaymentCallback(path)
+  ) {
+    return NextResponse.next();
+  }
+
+  // if (!hasSessionCookies(request)) {
+  //   return NextResponse.redirect(new URL("/login"));
+  // }
+
+  return NextResponse.next();
+}
+```
+
+**코드 해설:**
+이 코드는 변경 전 미들웨어의 인증 처리 부분을 보여줍니다. 주석 처리된 부분을 보면 기존에는 세션 쿠키 확인 후 로그인 페이지로 리다이렉트하는 방식을 사용했음을 알 수 있습니다.
+
+1.  주석 처리된 `hasSessionCookies` 함수는 여러 세션 쿠키(`auth_token`, `session_id`, `user_id`)의 존재 여부를 확인합니다.
+2.  인증 쿠키가 없는 경우, 로그인 페이지로 사용자를 `redirect`합니다. 이 방식의 문제점은 사용자가 원래 접근하려던 페이지의 URL과 컨텍스트를 잃게 되어, 로그인 후 다시 원하는 페이지로 돌아오기 어렵다는 것입니다.
+
+#### 변경 후 (`src/middleware.ts`의 인증 처리 로직)
+
+```typescript
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+function hasSessionCookies({ cookies }: NextRequest) {
+  return (
+    cookies.has("auth_token") &&
+    cookies.has("session_id") &&
+    cookies.has("user_id")
+  );
+}
+
+function isPaymentCallback(path: string) {
+  return path.match(/\/payment\/[^/]+\/(success|fail)/);
+}
+
+export function authenticationMiddleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  if (
+    path.startsWith("/_next") ||
+    path.startsWith("/api") ||
+    isPaymentCallback(path)
+  ) {
+    return NextResponse.next();
+  }
+
+  if (!hasSessionCookies(request)) {
+    // 브라우저의 URL은 유지한 채, 루트 경로로 리라이트 (내부적으로 처리)
+    const res = NextResponse.rewrite(new URL("/", request.url));
+    res.headers.set("X-Error-Status", "401");
+    res.headers.set(
+      "X-Error-Message",
+      encodeURIComponent("로그인 정보가 없어 로그인 사이트로 이동합니다.")
+    );
+    return res;
+  }
+
+  return NextResponse.next();
+}
+```
+
+**코드 해설:**
+변경 후 `authenticationMiddleware`는 인증 오류 발생 시 훨씬 사용자 친화적인 방식을 사용합니다.
+
+1.  `if (!hasSessionCookies(request))`: 세션 쿠키가 없는 경우, 즉 인증되지 않은 사용자의 요청일 때 실행됩니다.
+2.  `const res = NextResponse.rewrite(new URL("/", request.url));`: `NextResponse.rewrite`를 사용하여 브라우저의 URL은 현재 경로를 유지하되, 서버 내부적으로는 루트 경로(`/`)로 요청을 재작성합니다. 이로써 Next.js SSR 런타임은 루트 페이지를 렌더링하려 시도하게 됩니다.
+3.  `res.headers.set("X-Error-Status", "401");`: 응답 헤더에 `X-Error-Status`를 "401"로 설정합니다. 이 커스텀 헤더는 오류 상태를 SSR 컴포넌트로 전달하는 역할을 합니다.
+4.  `res.headers.set("X-Error-Message", encodeURIComponent(...));`: `X-Error-Message`에는 사용자에게 보여줄 구체적인 오류 메시지를 URL 인코딩하여 설정합니다. 이 메시지 또한 SSR 컴포넌트로 전달됩니다.
+    이러한 변경으로 인해 미들웨어에서 감지된 인증 오류가 클라이언트에게 직접 리다이렉트되는 대신, 커스텀 헤더를 통해 SSR 페이지 컴포넌트로 안전하게 전달되어 일관된 오류 처리 흐름에 통합될 수 있게 됩니다.
+
+### 5. HOC에 미들웨어 오류 처리 로직 추가
+
+마지막으로, 앞서 구현한 `withPageErrorHandling` HOC에 미들웨어에서 전달된 커스텀 헤더를 감지하는 로직을 추가했습니다. 이를 통해 미들웨어 오류도 페이지 내부 오류와 동일한 방식으로 처리할 수 있게 됩니다.
+
+#### 개선된 HOC (`src/libs/ssrErrorHandlingUtils.tsx`)
+
+```typescript
+import React from "react";
+import { BackendApiError } from "@/libs/api/serverApis";
+import GlobalErrorDisplay from "@/components/globalErrorDisplay/GlobalErrorDisplay";
+import { headers as serverRequestHeaders } from "next/headers";
+
+export function withPageErrorHandling<P>(
+  WrappedPageComponent: (props: P) => Promise<React.ReactElement>
+) {
+  return async function RenderWrapper(props: P) {
+    try {
+      // authenticationMiddleware에서 쿠키가 없으면 에러 발생시킨 것을 handling
+      const currentRequestHeaders = serverRequestHeaders();
+      if (currentRequestHeaders.get("X-Error-Status") === "401") {
+        throw new BackendApiError(
+          401,
+          JSON.stringify({
+            errorCode: 401001,
+            errorMessage: decodeURIComponent(
+              currentRequestHeaders.get("X-Error-Message") || ""
+            ),
+          })
+        );
+      }
+
+      return await WrappedPageComponent(props);
+    } catch (err: any) {
+      console.log("Error occurred:", err, err instanceof BackendApiError);
+
+      if (err instanceof BackendApiError) {
+        return (
+          <GlobalErrorDisplay
+            error={{
+              statusCode: err.statusCode,
+              errorMessage: err.errorMessage,
+            }}
+          />
+        );
+      }
+      return (
+        <GlobalErrorDisplay
+          error={{
+            statusCode: 500,
+            errorMessage: JSON.stringify({
+              errorCode: 500000,
+              errorMessage: err.message ?? "",
+            }),
+          }}
+        />
+      );
+    }
+  };
+}
+```
+
+**코드 해설:**
+`withPageErrorHandling` HOC에 미들웨어 오류 처리 로직이 추가되었습니다. 이 HOC는 이제 페이지 컴포넌트 실행 전에 미들웨어에서 전달된 오류 정보를 선제적으로 감지하고 처리합니다.
+
+1.  `const currentRequestHeaders = serverRequestHeaders();`: Next.js 13+에서 서버 컴포넌트나 SSR 환경에서 요청 헤더를 읽기 위해 `next/headers`의 `serverRequestHeaders` 함수를 사용합니다.
+2.  `if (currentRequestHeaders.get("X-Error-Status") === "401")`: 미들웨어에서 설정한 `X-Error-Status` 헤더가 "401"인지 확인합니다. 이는 인증 오류가 발생했음을 나타냅니다.
+3.  `throw new BackendApiError(...)`: 헤더가 존재하면, 해당 헤더 값(상태 코드와 메시지)을 기반으로 새로운 `BackendApiError` 인스턴스를 생성하여 명시적으로 던집니다. `X-Error-Message`는 URL 인코딩되어 있으므로 `decodeURIComponent`로 디코딩합니다.
+4.  이 `throw`된 `BackendApiError`는 HOC의 `catch` 블록으로 즉시 넘어가 기존의 오류 처리 흐름과 동일하게 `GlobalErrorDisplay` 컴포넌트에 의해 처리됩니다.
+    이로써 미들웨어에서 감지된 인증 오류까지 `withPageErrorHandling` HOC를 통해 중앙집중적으로 처리되며, 사용자에게 일관된 모달 형태의 오류 메시지를 보여줄 수 있게 되었습니다.
+
+## 결과 및 효과, 그리고 남은 과제
+
+이러한 개선 작업들을 통해 저희 서비스는 다음과 같은 긍정적인 효과를 얻을 수 있었습니다.
+
+- **중앙집중식 오류 처리**: 각 페이지에 분산되어 있던 `try-catch` 로직을 `withPageErrorHandling` HOC로 통합하여 코드 중복을 제거하고 유지보수성을 크게 향상시켰습니다.
+- **일관된 사용자 경험**: 미들웨어에서 발생하는 인증 오류까지 SSR 페이지의 공통 오류 처리 흐름에 통합하여, 어떤 경로에서든 사용자에게 일관된 UI와 메시지로 오류를 전달할 수 있게 되었습니다. 사용자는 이제 URL 변경 없이 현재 페이지에서 오류 모달을 통해 문제 상황을 인지하고 적절한 후속 조치를 안내받을 수 있습니다.
+- **관심사 분리**: 페이지 컴포넌트는 데이터 페칭과 렌더링에만 집중하고, 오류 처리와 같은 크로스-커팅 관심사는 HOC가 담당하게 되어 코드의 가독성과 역할 분리가 명확해졌습니다.
+- **견고한 결제 서비스**: 결제와 같은 중요 흐름에서 발생할 수 있는 오류를 놓치지 않고 사용자에게 명확하게 전달함으로써, 서비스의 신뢰도를 높이고 사용자 이탈을 줄일 수 있게 되었습니다. `GlobalErrorDisplay` 컴포넌트가 오류 코드(예: 401001, 404001)에 따라 다른 메시지와 액션(로그인 페이지 이동, 홈 이동, 창 닫기)을 제공함으로써, 오류 상황에서도 사용자에게 명확하고 유용한 피드백을 제공합니다.
+
+이번 작업은 Next.js SSR 환경에서 서버 측 오류와 미들웨어 오류를 효과적으로 처리하는 중요한 패턴을 확립했다고 생각합니다. 다만, HTTP 헤더를 통해 오류 메시지를 전달하는 방식은 헤더 크기 제한에 유의해야 합니다. 현재는 간단한 메시지를 전달하므로 문제가 없지만, 복잡하거나 긴 메시지를 전달해야 할 경우 다른 방법을 고려해야 할 것입니다. 또한, 오류 메시지에 민감한 정보가 포함되지 않도록 항상 주의해야 합니다.
+
+## 배운 점 및 다음 단계
+
+이번 프로젝트를 진행하며 Next.js의 미들웨어와 SSR의 깊은 연동 방식, 그리고 HOC 패턴의 실용적인 활용법에 대해 깊이 있게 이해할 수 있었습니다. 특히 미들웨어에서 `NextResponse.rewrite`와 커스텀 헤더를 활용하여 서버 렌더링 단계로 오류 정보를 전파하는 아이디어는 매우 유용하다고 느꼈습니다. 덕분에 결제 서비스의 안정성과 사용자 경험을 한 단계 더 끌어올릴 수 있었습니다.
+
+앞으로는 클라이언트 측 Error Boundaries와 같은 React의 다른 오류 처리 메커니즘과 연동하여, SSR 단계뿐만 아니라 클라이언트 측 렌더링 중 발생하는 오류까지 포괄적으로 커버하는 더욱 견고한 시스템을 구축하는 것을 목표로 하고 있습니다. 사용자에게 어떤 상황에서도 끊김 없는 서비스를 제공하기 위한 노력은 계속될 것입니다.
+
+긴 글 읽어주셔서 감사합니다!
+
+---
+
+## 참고 자료
+
+- [Server-side Rendering (SSR) - Next.js](https://nextjs.org/docs/pages/building-your-application/rendering/server-side-rendering)
+- [Routing: Middleware - Next.js](https://nextjs.org/docs/app/building-your-application/routing/middleware)
+- [고차 컴포넌트 - React](https://ko.react.dev/learn/reusing-logic-with-custom-hooks#extracting-stateful-logic-into-a-custom-hook)
+- [HTTP header - Glossary - MDN Web Docs](https://developer.mozilla.org/ko/docs/Glossary/HTTP_header)
+- [에러 경계(Error Boundaries) - React](https://ko.react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary)
+- [Next.js Server-side Rendering (SSR) - Next.js 한글 문서 번역 (커뮤니티)](https://nextjs.org/docs/pages/building-your-application/rendering/server-side-rendering)
+- [Next.js의 미들웨어 사용 가이드](https://www.pax-code.xyz/nextjs-middleware-guide)
+- [React HOC(High Order Component)란? - velog](https://velog.io/@skay7422/React-HOC-High-Order-Component%EB%9E%80)
+- [주요 HTTP headers에 대하여 ! - Goddemi - 티스토리](https://goddemi.tistory.com/entry/HTTP-headers)
+- [React Error Boundary를 사용한 에러처리 (react-query) - IT 공부를 위한 블로그 - 티스토리](https://itstory1592.tistory.com/49)
