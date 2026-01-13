@@ -2,6 +2,7 @@ import { getAllPosts, getPostBySlug } from "@/lib/posts";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import rehypePrettyCode from "rehype-pretty-code";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { CopyButton } from "@/components/copy-button";
 import { cn } from "@/lib/utils";
 
@@ -12,21 +13,66 @@ export async function generateStaticParams() {
   }));
 }
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://example.com";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
+const buildUrl = (pathname: string) => {
+  const normalizedPath = `${basePath}${pathname}`.replace(/\/{2,}/g, "/");
+  return new URL(normalizedPath, SITE_URL).toString();
+};
+
+const toAbsoluteUrl = (pathOrUrl: string) => {
+  if (/^https?:\/\//i.test(pathOrUrl)) {
+    return pathOrUrl;
+  }
+  const withLeadingSlash = pathOrUrl.startsWith("/")
+    ? pathOrUrl
+    : `/${pathOrUrl}`;
+  return buildUrl(withLeadingSlash);
+};
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
-}) {
+}): Promise<Metadata> {
   const { slug } = await params;
   const post = await getPostBySlug(slug);
   if (!post) return {};
+  const title = post.frontmatter.title;
+  const description = post.frontmatter.description;
+  const tags = post.frontmatter.tags || [];
+  const url = buildUrl(`/posts/${post.slug}`);
+  const image = post.frontmatter.coverImage
+    ? toAbsoluteUrl(post.frontmatter.coverImage)
+    : undefined;
   return {
-    title: post.frontmatter.title,
-    description: post.frontmatter.description,
+    metadataBase: new URL(SITE_URL),
+    title,
+    description,
+    keywords: tags,
+    alternates: {
+      canonical: url,
+    },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "article",
+      locale: "ko_KR",
+      publishedTime: post.frontmatter.date,
+      tags,
+      images: image ? [{ url: image, alt: title }] : undefined,
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title,
+      description,
+      images: image ? [image] : undefined,
+    },
   };
 }
-
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 const components = {
   // Simple Override for Pre to include Copy Button

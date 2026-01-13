@@ -4,7 +4,7 @@ import { MetadataRoute } from "next";
 export const dynamic = "force-static";
 
 // Define your base URL here.
-const BASE_URL = "https://example.com"; 
+const BASE_URL = "https://mochachoco.github.io/my-site";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const posts = await getAllPosts();
