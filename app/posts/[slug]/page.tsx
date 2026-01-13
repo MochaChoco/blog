@@ -26,6 +26,8 @@ export async function generateMetadata({
   };
 }
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 const components = {
   // Simple Override for Pre to include Copy Button
   pre: ({ children, className, ...props }: any) => (
@@ -45,6 +47,17 @@ const components = {
       />
     </div>
   ),
+  // Override img to handle basePath for static exports
+  img: ({ src, alt, ...props }: any) => {
+    const imageSrc = src?.startsWith('/') ? `${basePath}${src}` : src;
+    return (
+      <img
+        src={imageSrc}
+        alt={alt || ''}
+        {...props}
+      />
+    );
+  },
 };
 
 export default async function PostPage({
