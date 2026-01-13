@@ -1,0 +1,377 @@
+---
+title: SSR 환경에서 SCSS Mixin으로 플리커링 해결하기
+description: "JavaScript 기반 반응형 로직을 SCSS Mixin으로 전환하여 SSR 환경에서 발생하는 플리커링(FOUC) 문제를 근본적으로 해결한 사례를 공유합니다."
+date: "2025-01-05"
+tags: ["ssr", "scss", "vue", "css", "frontend"]
+slug: "ssr-flickering-scss-mixin"
+coverImage: "/images/posts/prevent-fouc/cover.jpg"
+---
+
+## SSR 환경, 플리커링과의 전쟁 선포
+
+현대 웹 애플리케이션 개발에서 사용자 경험은 그 무엇보다 중요합니다. 특히 초기 로딩 속도와 검색 엔진 최적화(SEO)를 위해 서버사이드 렌더링(SSR)은 필수적인 기술이 되었죠. 저희 프로젝트 역시 SSR을 적극적으로 활용하여 사용자들에게 빠르고 일관된 콘텐츠를 제공하고자 노력하고 있습니다.
+
+하지만 SSR 환경에서 흔히 마주치는 골치 아픈 문제가 하나 있습니다. 바로 '플리커링(Flickering)' 현상입니다. 페이지가 처음 로드될 때, 잠시 동안 스타일이 적용되지 않은 콘텐츠가 '번쩍'하고 나타났다가 뒤늦게 올바른 스타일이 적용되는 현상을 말합니다.
+
+![FOUC - example](/images/posts/prevent-fouc/fouc-example.gif)
+
+이는 사용자에게 웹사이트가 불안정하거나 깨진 것처럼 보이는 인상을 주어 사용자 경험을 크게 저해합니다.
+
+저희 서비스의 여러 목록 페이지에서는 다양한 크기의 카드 컴포넌트들이 반응형으로 배치됩니다. 기존에는 이 카드 컴포넌트들의 크기나 내부 요소 스타일을 JavaScript 로직에 의존하여 동적으로 계산하고 적용하고 있었습니다. 이 방식은 클라이언트 사이드에서 JavaScript 파일이 완전히 다운로드되고 실행되기 전까지는 정확한 스타일을 알 수 없다는 본질적인 한계를 가지고 있었습니다. 결과적으로 SSR된 초기 HTML에는 기본 스타일만 적용되어 있다가, JS 로딩 후 제대로 된 스타일이 적용되면서 시각적인 불일치, 즉 플리커링이 발생했던 것이죠.
+
+이러한 문제를 해결하기 위해, 저희는 컴포넌트의 반응형 처리 로직을 JavaScript에서 SCSS Mixin 기반으로 전면 개편하는 작업을 진행했습니다. 이 과정에서 겪었던 문제점, 해결 방안, 그리고 그 결과에 대해 공유하고자 합니다.
+
+## 개념 설명: SSR 환경에서의 반응형 디자인 전략
+
+플리커링 현상을 이해하고 효과적으로 해결하기 위해서는 SSR의 작동 방식과 그 한계점을 먼저 파악하는 것이 중요합니다.
+
+### SSR (Server-Side Rendering)과 플리커링 (FOUC)
+
+SSR은 서버에서 미리 HTML을 생성하여 클라이언트에 전송하는 방식입니다. [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Glossary/SSR)에 따르면, 이는 초기 로딩 속도 개선과 SEO에 매우 유리합니다. 브라우저는 서버로부터 받은 완전한 HTML을 즉시 렌더링할 수 있기 때문에, 사용자는 콘텐츠를 더 빠르게 볼 수 있습니다.
+
+하지만, 만약 페이지의 레이아웃이나 스타일이 **클라이언트 사이드 JavaScript**에 의해 동적으로 결정된다면 문제가 발생합니다. SSR된 HTML에는 해당 JavaScript가 아직 실행되기 전의 '기본' 또는 '미완성'된 스타일만이 존재할 것입니다. 브라우저가 이 HTML을 렌더링한 후, JavaScript 파일을 다운로드하고 실행하는 과정에서 비로소 정확한 스타일이 적용됩니다. [Wikipedia](https://en.wikipedia.org/wiki/Flash_of_unstyled_content)에서 설명하는 FOUC(Flash of Unstyled Content)는 바로 이러한 시차 때문에 발생하며, 사용자에게는 페이지가 '번쩍'하는 불쾌한 경험으로 다가옵니다. 특히 저희처럼 다양한 크기의 카드 컴포넌트가 사용되는 목록 페이지에서는 더욱 두드러지게 나타났습니다.
+
+이 문제를 해결하기 위한 핵심은 **"클라이언트 JavaScript의 개입 없이도 SSR 시점에 올바른 반응형 스타일이 적용되도록 하는 것"**입니다. 여기서 SCSS Mixin과 CSS Custom Properties가 강력한 해결책이 됩니다.
+
+### SCSS Mixins: 재사용 가능한 동적 스타일 블록
+
+[Sass 공식 문서](https://sass-lang.com/documentation/at-rules/mixin/)에 따르면 SCSS Mixin은 재사용 가능한 CSS 선언 그룹을 정의하는 기능입니다. `@mixin`으로 정의하고 `@include`로 불러와 사용하며, 매개변수를 받을 수 있어 유연한 스타일 생성이 가능합니다.
+
+```scss
+// _mixins.scss
+@mixin flex-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+@mixin responsive-text($min-size, $max-size) {
+  font-size: clamp($min-size, 2vw, $max-size);
+  line-height: 1.5;
+}
+
+// style.scss
+.container {
+  @include flex-center;
+  height: 100vh;
+  .title {
+    @include responsive-text(16px, 32px);
+    color: #333;
+  }
+}
+```
+
+_위 코드는 SCSS Mixin의 기본적인 사용 예시입니다. `flex-center` Mixin은 자주 사용되는 Flexbox 속성들을 묶어주고, `responsive-text` Mixin은 인자로 받은 최소/최대 크기 범위 내에서 유동적인 폰트 크기를 설정해줍니다. 이처럼 Mixin을 활용하면 코드 중복을 줄이고, 디자인 시스템의 일관성을 유지하면서도 필요에 따라 동적인 값을 적용할 수 있습니다._
+
+저희의 경우, 이 Mixin의 강력한 기능을 `@for` 루프와 결합하여 동적으로 미디어 쿼리를 생성하고, 각 브레이크포인트에 맞는 스타일을 적용하는 데 활용했습니다. 이는 기존에 JavaScript가 담당하던 반응형 로직을 CSS 전처리 단계에서 처리할 수 있게 함으로써, SSR 시에도 즉시 정확한 스타일이 적용되도록 합니다.
+
+### CSS Custom Properties (CSS 변수): 유연한 크기 관리
+
+[MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties)에 명시된 CSS Custom Properties는 "CSS 변수"로도 불리며, CSS 내에서 재사용 가능한 값을 정의할 수 있게 합니다. `--main-color: blue;`와 같이 `--` 접두사로 선언하고, `color: var(--main-color);`처럼 `var()` 함수로 참조합니다.
+
+```css
+:root {
+  --primary-color: #007bff;
+  --spacing-unit: 16px;
+}
+
+.button {
+  background-color: var(--primary-color);
+  padding: calc(var(--spacing-unit) / 2) var(--spacing-unit);
+}
+```
+
+_위 예시는 CSS Custom Properties를 사용하여 반복되는 값들을 변수화하는 방법을 보여줍니다. `var(--spacing-unit)`처럼 값을 참조하면, `--spacing-unit`의 값만 변경하면 해당 변수를 사용하는 모든 요소의 스타일이 일괄적으로 업데이트됩니다. 이는 디자인 시스템의 유연성을 극대화하고, 테마 변경 등 동적인 스타일 적용에 매우 효과적입니다._
+
+저희 프로젝트에서는 SCSS Mixin에서 계산된 반응형 크기 값들을 `--main-item-size-default`, `--main-item-size-mobile`과 같은 CSS Custom Properties로 선언하여, 하위 컴포넌트들이 이 변수들을 참조하도록 했습니다. 이로써 컴포넌트는 `componentSize` prop을 명시적으로 받지 않고도 컨테이너의 반응형 크기 변화에 유연하게 대응할 수 있습니다.
+
+### `:deep()` Pseudo-class: Scoped CSS 내에서 자식 컴포넌트 스타일링
+
+Vue.js와 같이 컴포넌트 기반 프레임워크에서 `scoped` CSS를 사용하면, 스타일이 해당 컴포넌트에만 국한되어 다른 컴포넌트에 영향을 주지 않습니다. 이는 컴포넌트 캡슐화를 유지하는 데 매우 유용합니다. 하지만 때로는 부모 컴포넌트에서 자식 컴포넌트의 특정 요소를 스타일링해야 할 필요가 있습니다. 이때 `:deep()` 유사 클래스를 사용합니다.
+
+```vue
+<!-- ParentComponent.vue -->
+<template>
+  <div class="parent-container">
+    <ChildComponent />
+  </div>
+</template>
+
+<style scoped>
+.parent-container :deep(.child-button) {
+  background-color: #28a745;
+  color: white;
+  padding: 10px 15px;
+}
+</style>
+```
+
+_위 코드는 `ParentComponent`에서 `scoped` 스타일을 사용하면서도 `:deep()`을 통해 `ChildComponent` 내의 `.child-button`에 스타일을 적용하는 예시입니다. `:deep()`은 컴포넌트 캡슐화의 경계를 넘어 스타일을 적용할 수 있게 해주지만, 과도하게 사용하면 CSS의 예측 가능성을 떨어뜨릴 수 있으므로 신중하게 사용해야 합니다._
+
+저희의 `applyItemStylesMixin`은 `:deep()`을 사용하여 상위 컨테이너에서 하위 카드 컴포넌트의 내부 요소(예: 아이콘, 텍스트)에 반응형 스타일을 직접 적용했습니다. 이는 JavaScript 로직 없이도 복잡한 내부 요소들의 스타일을 SCSS 단에서 일관되게 제어하는 데 필수적인 역할을 했습니다.
+
+## 구현 포인트: JS에서 SCSS로 반응형 로직 전환
+
+이제 실제 코드 변경 전후를 비교하며, 플리커링 문제를 해결하기 위한 구체적인 구현 과정을 살펴보겠습니다.
+
+### SCSS Mixin에서 반응형 처리
+
+먼저 이번 해결책의 핵심인 SCSS Mixin의 구조를 살펴보겠습니다. 이 Mixin들이 어떻게 JavaScript 없이도 반응형 스타일을 처리하는지 이해하면, 이후 Before/After 코드 비교가 훨씬 명확해집니다.
+
+```scss
+// src/assets/scss/_helper-mixins.scss
+
+// 1. 브레이크포인트별로 동적으로 미디어 쿼리 생성
+@mixin applyResponsiveSizesMixin($sizes) {
+  $breakpoints: map-get($sizes, breakpoints); // [0px, 360px, 768px, ...]
+
+  @for $i from 1 through length($breakpoints) {
+    $breakpoint: nth($breakpoints, $i);
+    $size: nth(map-get($sizes, default), $i);
+
+    @include media-query($breakpoint) {
+      @include applyItemStylesMixin($size);
+    }
+  }
+}
+
+// 2. 각 크기에 따른 상세 스타일 설정
+@mixin applyItemStylesMixin($active-size) {
+  $heart-icon-size: 24px;
+  $duration-font-size: 10px;
+
+  @if $active-size == 228px {
+    $heart-icon-size: 32px;
+    $duration-font-size: 12px;
+  } @else if $active-size == 160px {
+    $heart-icon-size: 28px;
+    $duration-font-size: 12px;
+  }
+
+  // :deep()로 자식 컴포넌트 스타일 적용
+  :deep(.item-root-element) {
+    .favorite-icon {
+      width: $heart-icon-size;
+      height: $heart-icon-size;
+    }
+    .content-duration {
+      font-size: $duration-font-size;
+    }
+  }
+}
+```
+
+**핵심 작동 원리:**
+
+1. **`applyResponsiveSizesMixin`**: `@for` 루프를 사용하여 각 브레이크포인트마다 자동으로 미디어 쿼리를 생성합니다. 이를 통해 반복적인 코드 작성 없이 모든 화면 크기에 대응할 수 있습니다.
+
+2. **`applyItemStylesMixin`**: 각 크기(`$active-size`)에 따라 `@if` 조건문으로 아이콘 크기, 폰트 크기 등의 스타일 변수를 설정합니다.
+
+3. **`:deep()` 셀렉터**: Vue의 scoped CSS 경계를 넘어 하위 컴포넌트의 내부 요소에 스타일을 적용합니다. 이를 통해 상위 컨테이너에서 카드 내부의 아이콘, 텍스트 등을 직접 제어할 수 있습니다.
+
+이 세 가지 기술의 조합으로 **컴파일 타임에 모든 반응형 스타일이 CSS로 변환**되어, SSR 시점에도 JavaScript 없이 즉시 적용됩니다.
+
+### JavaScript 기반 스타일 계산 로직 제거 및 SCSS Mixin으로 일원화
+
+이제 위에서 설명한 SCSS Mixin을 실제로 어떻게 적용했는지 Before/After 코드를 비교해보겠습니다.
+
+#### 변경 전 (Before)
+
+```vue
+<!-- src/components/cards/CardComponent.vue (부분) -->
+<template>
+  <div class="media-thumbnail" :style="thumbnailContainerStyles">
+    <svg-icon-heart
+      v-if="showFavoriteIcon"
+      class="favorite-icon"
+      :size="favoriteIconSize"
+    />
+    <span
+      class="content-duration"
+      v-if="props.componentSize > 104"
+      :style="{ fontSize: durationFontSize }"
+    >
+      {{ formattedDuration }}
+    </span>
+  </div>
+</template>
+
+<script setup lang="ts">
+interface ThumbnailProps {
+  componentSize: number; // componentSize prop을 받음
+  // ...
+}
+
+// componentSize에 따라 동적으로 스타일을 계산하는 computed 속성들
+const favoriteIconSize = computed(() => {
+  if ([228, 212, 196].includes(props.componentSize)) return 32;
+  if ([160, 140].includes(props.componentSize)) return 28;
+  return 32;
+});
+
+const durationFontSize = computed(() => {
+  return props.componentSize >= 160 ? "12px" : "10px";
+});
+
+const thumbnailContainerStyles = computed(() => {
+  // componentSize에 따른 padding, width, height 등 계산
+});
+</script>
+```
+
+_변경 전 `CardComponent`는 `componentSize` prop을 받아 `computed` 속성에서 아이콘 크기, 폰트 크기 등을 동적으로 계산했습니다. 템플릿의 `v-if` 조건문도 `props.componentSize`에 직접 의존했죠. 이는 SSR 시 JavaScript 로드 전에는 정확한 스타일을 알 수 없어 플리커링을 유발하는 주범이었습니다._
+
+#### 변경 후 (After)
+
+```vue
+<!-- src/components/cards/CardComponent.vue (부분) -->
+<template>
+  <div class="thumbnail-default">
+    <svg-icon-heart v-if="showFavoriteIcon" class="favorite-icon" />
+    <span class="content-duration" v-if="props.type === 'AUDIO'">
+      {{ formattedDuration }}
+    </span>
+  </div>
+</template>
+
+<script setup lang="ts">
+interface ThumbnailProps {
+  // componentSize prop 제거
+  // ...
+}
+// computed 속성들 모두 제거됨
+</script>
+
+<style lang="scss" scoped>
+.thumbnail-default {
+  // 부모 컨테이너의 CSS Custom Property 사용
+  width: var(--main-item-size-default);
+  height: var(--main-item-size-default);
+
+  // SCSS Mixin이 모든 반응형 스타일 처리
+  @include applyThumbnailContainerStyles;
+}
+</style>
+```
+
+_변경 후 `CardComponent`는 `componentSize` prop과 모든 JavaScript `computed` 속성을 제거했습니다. 대신 CSS Custom Property(`--main-item-size-default`)로 크기를 설정하고, `applyItemStylesMixin`이 SCSS `@if` 문과 `:deep()` 셀렉터로 내부 요소들의 반응형 스타일을 제어합니다._
+
+_핵심은 컴포넌트가 더 이상 자신의 크기나 내부 스타일을 JavaScript로 계산하지 않고, CSS(SCSS Mixin)에 의해 완벽하게 제어된다는 점입니다. 이를 통해 SSR 시에도 JS 로딩 없이 즉시 최종 스타일이 적용되어 플리커링을 근본적으로 방지합니다._
+
+### 리스트 컴포넌트에서 `componentSize` prop 제거 및 SCSS Mixin 적용
+
+카드 컴포넌트를 사용하는 리스트 컴포넌트들 (`GridList.vue`, `FeaturedSection.vue` 등)도 JavaScript 기반의 반응형 로직을 제거하고 SCSS Mixin을 직접 적용하도록 변경했습니다.
+
+#### 변경 전 (Before)
+
+```vue
+<!-- src/components/list/GridList.vue (부분) -->
+<template>
+  <div class="grid-list">
+    <ResponsiveMasonryGrid :items="itemList.list">
+      <template #default="{ item, index }">
+        <CardWrapper
+          :content-item="item"
+          :component-size="calculatedCardSize"
+          :index="index"
+        />
+      </template>
+    </ResponsiveMasonryGrid>
+  </div>
+</template>
+
+<script setup lang="ts">
+const { currentBreakpointName } = useViewportBreakpoints({
+  mobile1: 0,
+  mobile2: 420,
+  // ...
+});
+
+const calculatedCardSize = computed(() => {
+  switch (currentBreakpointName.value) {
+    case "mobile1":
+      return 160;
+    case "mobile2":
+      return 126;
+    default:
+      return 196;
+  }
+});
+</script>
+
+<style lang="scss" scoped>
+// 각 브레이크포인트마다 개별 미디어 쿼리 작성
+@include media-query(420px) {
+  .grid-list {
+    .masonry-image {
+      grid-template-columns: repeat(3, 126px);
+    }
+  }
+}
+// ... 여러 브레이크포인트에 대한 반복적인 미디어 쿼리
+</style>
+```
+
+_변경 전 `GridList`는 `useViewportBreakpoints` 훅으로 `calculatedCardSize`를 계산하여 하위 컴포넌트에 전달했습니다. 이는 JavaScript에 의존하므로 SSR 시점에 플리커링을 유발했습니다._
+
+#### 변경 후 (After)
+
+```vue
+<!-- src/components/list/GridList.vue (부분) -->
+<template>
+  <div class="grid-list">
+    <ResponsiveMasonryGrid :items="itemList.list">
+      <template #default="{ item, index }">
+        <CardWrapper :content-item="item" :index="index" />
+      </template>
+    </ResponsiveMasonryGrid>
+  </div>
+</template>
+
+<script setup lang="ts">
+// useViewportBreakpoints와 calculatedCardSize 제거
+// componentSize prop 전달 로직 제거
+</script>
+
+<style lang="scss" scoped>
+.grid-list {
+  .list-container {
+    // SCSS Mixin으로 모든 반응형 스타일 처리
+    @include applyResponsiveSizesMixin($responsiveSizeMapList);
+
+    .masonry-image {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+}
+// 반복적인 미디어 쿼리 블록 모두 제거됨
+</style>
+```
+
+_변경 후 `GridList`는 JavaScript 로직을 완전히 제거하고, `applyResponsiveSizesMixin`으로 모든 반응형 스타일을 SCSS에서 처리합니다. `componentSize` prop 전달도 불필요해져 컴포넌트 간 결합도가 낮아지고, 반응형 로직이 중앙 집중화되어 유지보수가 용이해졌습니다._
+
+## 결과 및 효과: 플리커링 없는 SSR, 더 나은 사용자 경험
+
+이러한 전면적인 개편을 통해 우리 서비스는 다음과 같은 긍정적인 변화를 얻을 수 있었습니다.
+
+1.  **플리커링 현상 제거**: 가장 큰 성과입니다. 서버사이드 렌더링 시 JavaScript가 로드되기 전에도 SCSS Mixin에 의해 모든 반응형 스타일이 즉시 적용되므로, 사용자는 더 이상 스타일이 깨진 화면을 보지 않고 일관된 UI를 경험하게 되었습니다. 이는 사용자 경험을 크게 향상시켰습니다.
+2.  **초기 로딩 성능 개선**: JavaScript의 실행 대기 시간 없이 스타일이 적용되므로, 실제 사용자 인지 측면에서의 초기 렌더링 성능이 개선되었습니다.
+3.  **코드 유지보수성 및 확장성 향상**: 반응형 로직이 SCSS Mixin으로 중앙 집중화되면서, 새로운 브레이크포인트 추가나 스타일 변경이 훨씬 용이해졌습니다. 각 컴포넌트에서 중복되던 JavaScript 로직이 사라져 코드 베이스가 간결해지고, 오류 발생 가능성도 줄어들었습니다.
+4.  **관심사 분리 및 컴포넌트 가독성 증대**: Vue 컴포넌트들은 이제 순수하게 데이터와 UI 상호작용에만 집중하고, 스타일링에 대한 책임은 SCSS가 전담하게 되었습니다. 이는 컴포넌트의 가독성을 높이고 테스트 용이성을 향상시키는 효과를 가져왔습니다.
+5.  **디자인 시스템 유연성 강화**: SCSS Mixin과 CSS Custom Properties의 조합은 더욱 유연한 디자인 시스템 구축의 기반을 마련했습니다. 필요에 따라 전역 또는 지역적으로 스타일 변수를 쉽게 관리하고 변경할 수 있게 되었습니다.
+
+물론 이 과정에서 `:deep()` 셀렉터의 사용과 같이 컴포넌트 캡슐화를 다소 침해하는 부분도 존재합니다. 하지만 이는 SSR 환경에서의 플리커링이라는 핵심 문제를 해결하기 위한 불가피한 선택이었으며, 가능한 한 제한적으로 사용하여 잠재적인 부작용을 최소화했습니다.
+
+이번 작업은 단순히 코드를 옮기는 것을 넘어, SSR 환경에서 사용자 경험을 최적화하기 위한 깊은 고민과 새로운 접근 방식의 적용이었습니다. 앞으로도 우리 서비스는 더욱 견고하고 사용자 친화적인 웹 서비스를 제공하기 위해 끊임없이 노력할 것입니다.
+
+## 참고 자료
+
+### SSR 관련
+- [MDN Web Docs: Server-side rendering (SSR)](https://developer.mozilla.org/en-US/docs/Glossary/SSR)
+- [Wikipedia: Flash of unstyled content](https://en.wikipedia.org/wiki/Flash_of_unstyled_content)
+
+### SCSS Mixins
+- [Sass Documentation: @mixin and @include](https://sass-lang.com/documentation/at-rules/mixin/)
+
+### CSS Custom Properties
+- [MDN Web Docs: Using CSS custom properties (variables)](https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties)
