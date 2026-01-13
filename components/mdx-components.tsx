@@ -8,7 +8,7 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
     pre: ({ children, className, ...props }) => {
        return (
         <div className="relative group">
-           <pre className={cn("overflow-x-auto rounded-lg border bg-muted p-4", className)} {...props}>
+           <pre className={cn("overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 p-4 my-4 text-sm leading-6", className)} {...props}>
              {children}
            </pre>
            <CopyButton text="" className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity" />

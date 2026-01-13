@@ -12,7 +12,11 @@ export async function generateStaticParams() {
   }));
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
   const { slug } = await params;
   const post = await getPostBySlug(slug);
   if (!post) return {};
@@ -25,22 +29,29 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 const components = {
   // Simple Override for Pre to include Copy Button
   pre: ({ children, className, ...props }: any) => (
-    <div className="relative group my-6">
+    <div className="relative group">
       <pre
         className={cn(
-          "overflow-x-auto rounded-lg border bg-secondary/50 p-4",
+          "overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 p-4 my-4 text-sm leading-6",
           className
         )}
         {...props}
       >
         {children}
       </pre>
-      <CopyButton text="" className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+      <CopyButton
+        text=""
+        className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity"
+      />
     </div>
   ),
 };
 
-export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function PostPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
   const { slug } = await params;
   const post = await getPostBySlug(slug);
 
@@ -62,7 +73,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           ))}
         </div>
       </div>
-      <div className="prose prose-neutral dark:prose-invert max-w-none">
+      <div className="prose max-w-none prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-code:text-pink-600 dark:prose-code:text-pink-400 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:before:content-none prose-code:after:content-none prose-code:font-mono prose-code:text-sm dark:prose-invert">
         <MDXRemote
           source={post.content}
           components={components}
@@ -72,8 +83,8 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
                 [
                   rehypePrettyCode,
                   {
-                    theme: "github-dark",
-                    keepBackground: false,
+                    theme: "one-dark-pro",
+                    keepBackground: true,
                   },
                 ],
               ],
