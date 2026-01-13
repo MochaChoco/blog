@@ -1,17 +1,22 @@
 import { getAllPosts } from "@/lib/posts";
 import { PostCard } from "@/components/post-card";
 
-export default async function Home() {
+export const metadata = {
+  title: "All Posts",
+  description: "Browse all articles.",
+};
+
+export default async function PostsPage() {
   const posts = await getAllPosts();
 
   return (
     <div className="space-y-10 max-w-2xl mx-auto">
       <div className="space-y-4">
         <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
-          Latest Posts
+          All Posts
         </h1>
         <p className="text-xl text-muted-foreground">
-          Writing about technology, coding, and everything in between.
+          Archive of all articles.
         </p>
       </div>
       <hr />
