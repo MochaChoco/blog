@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { getAllTags } from "@/lib/posts";
+import { buildPageMetadata } from "@/lib/metadata";
+
+export const metadata = buildPageMetadata("/tags");
 
 export default async function TagsPage() {
   const tags = await getAllTags();

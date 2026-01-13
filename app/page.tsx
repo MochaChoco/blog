@@ -1,5 +1,8 @@
 import { getAllPosts } from "@/lib/posts";
 import { PostCard } from "@/components/post-card";
+import { buildPageMetadata } from "@/lib/metadata";
+
+export const metadata = buildPageMetadata("/");
 
 export default async function Home() {
   const posts = await getAllPosts();

@@ -1,10 +1,8 @@
 import { getAllPosts } from "@/lib/posts";
 import { SearchClient } from "@/components/search-client";
+import { buildPageMetadata } from "@/lib/metadata";
 
-export const metadata = {
-  title: "Search",
-  description: "Search for articles.",
-};
+export const metadata = buildPageMetadata("/search");
 
 export default async function SearchPage() {
   const posts = await getAllPosts();
