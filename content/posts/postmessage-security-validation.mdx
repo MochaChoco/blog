@@ -17,8 +17,8 @@ coverImage: "/images/posts/postmessage-security-validation/cover.png"
 
 <img
   src="/my-site/images/posts/postmessage-security-validation/infinite-message.gif"
-  style={{ width: "360px" }}
-  alt="커버 이미지"
+  style={{ maxWidth: "360px" }}
+  alt="problem"
 />
 
 “가끔만 깨지는” 원인이 외부에서 주입되는 메시지였던 셈입니다.
@@ -43,13 +43,6 @@ coverImage: "/images/posts/postmessage-security-validation/cover.png"
 외부 연동에서는 팝업에서 인증을 마친 뒤 `postMessage`로 토큰(`access_token`), 토큰 타입(`token_type`), 만료 시간(`expires_in`), 상태 값(`state`) 같은 값을 부모 창으로 전달합니다. 여기서 `state`는 요청/응답의 연관성을 유지하고 CSRF를 막는 데 쓰이기 때문에, 빠지면 안 되는 값입니다.
 
 다만 `postMessage`는 ‘외부에서 들어오는 데이터’를 받는 구조라서, 예상 못 한 입력이 들어올 가능성을 늘 열어둬야 합니다. 이번처럼 브라우저 확장 프로그램 같은 변수가 끼면, 메시지가 반복 전송되거나 형식이 깨진 데이터가 유입될 수 있고요. 그래서 수신 단계에서부터 “신뢰하지 말고 검증한다”는 전제를 깔아야 합니다.
-
-> **참고 자료:**
->
-> - `window.postMessage()`: [https://developer.mozilla.org/ko/docs/Web/API/Window/postMessage](https://developer.mozilla.org/ko/docs/Web/API/Window/postMessage)
-> - OAuth 2.0: [https://oauth.net/2/](https://oauth.net/2/)
-> - OpenID Connect: [https://openid.net/connect/](https://openid.net/connect/)
-> - Same-origin policy: [https://developer.mozilla.org/ko/docs/Web/Security/Same-origin_policy](https://developer.mozilla.org/ko/docs/Web/Security/Same-origin_policy)
 
 ## Before: 취약했던 `postMessage` 데이터 검증 로직
 
