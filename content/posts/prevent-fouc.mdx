@@ -27,7 +27,7 @@ coverImage: "/images/posts/prevent-fouc/cover.jpg"
 
 ### SSR (Server-Side Rendering)과 플리커링 (FOUC)
 
-SSR은 서버에서 미리 HTML을 생성하여 클라이언트에 전송하는 방식입니다. [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Glossary/SSR)에 따르면, 이는 초기 로딩 속도 개선과 SEO에 매우 유리합니다. 브라우저는 서버로부터 받은 완전한 HTML을 즉시 렌더링할 수 있기 때문에, 사용자는 콘텐츠를 더 빠르게 볼 수 있습니다.
+SSR은 서버에서 미리 HTML을 생성하여 클라이언트에 전송하는 방식입니다. 이는 초기 로딩 속도 개선과 SEO에 매우 유리합니다. 브라우저는 서버로부터 받은 완전한 HTML을 즉시 렌더링할 수 있기 때문에, 사용자는 콘텐츠를 더 빠르게 볼 수 있습니다.
 
 하지만, 만약 페이지의 레이아웃이나 스타일이 **클라이언트 사이드 JavaScript**에 의해 동적으로 결정된다면 문제가 발생합니다. SSR된 HTML에는 해당 JavaScript가 아직 실행되기 전의 '기본' 또는 '미완성'된 스타일만이 존재할 것입니다. 브라우저가 이 HTML을 렌더링한 후, JavaScript 파일을 다운로드하고 실행하는 과정에서 비로소 정확한 스타일이 적용됩니다. [Wikipedia](https://en.wikipedia.org/wiki/Flash_of_unstyled_content)에서 설명하는 FOUC(Flash of Unstyled Content)는 바로 이러한 시차 때문에 발생하며, 사용자에게는 페이지가 '번쩍'하는 불쾌한 경험으로 다가옵니다. 특히 저희처럼 다양한 크기의 카드 컴포넌트가 사용되는 목록 페이지에서는 더욱 두드러지게 나타났습니다.
 
@@ -35,7 +35,7 @@ SSR은 서버에서 미리 HTML을 생성하여 클라이언트에 전송하는 
 
 ### SCSS Mixins: 재사용 가능한 동적 스타일 블록
 
-[Sass 공식 문서](https://sass-lang.com/documentation/at-rules/mixin/)에 따르면 SCSS Mixin은 재사용 가능한 CSS 선언 그룹을 정의하는 기능입니다. `@mixin`으로 정의하고 `@include`로 불러와 사용하며, 매개변수를 받을 수 있어 유연한 스타일 생성이 가능합니다.
+SCSS Mixin은 재사용 가능한 CSS 선언 그룹을 정의하는 기능입니다. `@mixin`으로 정의하고 `@include`로 불러와 사용하며, 매개변수를 받을 수 있어 유연한 스타일 생성이 가능합니다.
 
 ```scss
 // _mixins.scss
@@ -67,7 +67,7 @@ _위 코드는 SCSS Mixin의 기본적인 사용 예시입니다. `flex-center` 
 
 ### CSS Custom Properties (CSS 변수): 유연한 크기 관리
 
-[MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties)에 명시된 CSS Custom Properties는 "CSS 변수"로도 불리며, CSS 내에서 재사용 가능한 값을 정의할 수 있게 합니다. `--main-color: blue;`와 같이 `--` 접두사로 선언하고, `color: var(--main-color);`처럼 `var()` 함수로 참조합니다.
+CSS Custom Properties는 "CSS 변수"로도 불리며, CSS 내에서 재사용 가능한 값을 정의할 수 있게 합니다. `--main-color: blue;`와 같이 `--` 접두사로 선언하고, `color: var(--main-color);`처럼 `var()` 함수로 참조합니다.
 
 ```css
 :root {
