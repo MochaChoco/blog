@@ -1,0 +1,238 @@
+---
+title: "구형 Safari에서 모달 사용 시 스크롤 문제 해결하기"
+description: "구형 Safari 브라우저에서 모달/오버레이 UI 사용 시 발생하는 배경 스크롤 문제를 document.body와 position: fixed를 활용하여 해결한 경험을 공유합니다."
+date: "2025-01-15"
+tags: ["frontend", "debugging", "safari", "react", "css"]
+slug: "safari-scroll-fix"
+coverImage: "/images/posts/safari-scroll-fix/cover.png"
+---
+
+![커버 이미지](/images/posts/safari-scroll-fix/cover.png)
+
+안녕하세요. 오늘은 프론트엔드 개발자들이라면 한 번쯤 겪어봤을 법한, 하지만 생각보다 골치 아픈 CSS 문제를 해결했던 경험을 공유하려 합니다.
+프로젝트를 진행하던 중 특히 구형 Safari 환경에서 모달이나 드로어가 화면에 나타났을 때, 본문이 의도치 않게 스크롤되거나 스크롤 위치가 최상단으로 초기화되는 현상이 발견되었습니다. 이로 인해 사용자는 모달을 닫은 후 원래 보던 콘텐츠 위치를 다시 찾아야 하는 불편함을 겪어야 했습니다. 단순히 `overflow: hidden`만 적용해서는 해결되지 않는 고질적인 문제였죠.
+
+이 문제는 주로 iOS Safari의 구형 버전(iOS 12-14 버전대)에서 자주 보고되었습니다. 모달 열림 시 배경이 최상단으로 스크롤되거나, 모달 닫힘 후 이전 스크롤 위치로 돌아가지 않거나, 스크롤 위치가 예측 불가능하게 변경되는 등의 증상이 나타났습니다. 모든 사용자에게 브라우저를 최신으로 업데이트하라고 얘기할 수도 없는 노릇이라 여러 의미로 이 문제는 심각한 것이었습니다.
+
+## 핵심 해결책
+
+이 문제의 핵심 해결책은 다음과 같았습니다.
+
+1. **모달이 열릴 때**: 현재 스크롤 위치를 저장하고, `document.body`에 `position: fixed`와 `overflow: hidden`을 적용합니다. 동시에 `body.style.top = -${scrollY}px`를 설정하여 시각적으로 스크롤 위치를 유지합니다.
+
+2. **모달이 닫힐 때**: `body`의 `position: fixed`와 `top` 스타일을 제거하고, `window.scrollTo(0, 저장된스크롤위치)`로 원래 위치로 복원합니다.
+
+이 방식은 `html` 요소 대신 `body` 요소를 제어하여 구형 Safari에서 발생하는 스크롤 초기화 문제를 우회합니다. `position: fixed`로 `body`를 뷰포트에 고정시키고, 음수 `top` 값으로 현재 보이는 콘텐츠 위치를 유지하는 시각적 트릭을 활용하는 것이 핵심입니다.
+
+## 구현 방법
+
+구형 Safari 스크롤 문제를 해결하기 위한 구체적인 구현 내용을 살펴보겠습니다.
+
+### 1. 모달 컴포넌트
+
+```javascript
+// Modal.tsx
+const otherOverlayStore = useOverlayStore();
+const scrollPosition = useRef(0); // 렌더링과 무관하게 스크롤 위치를 저장할 useRef
+
+useEffect(() => {
+  // 다른 오버레이가 이미 열려있다면, 모달은 body.overflow-hidden만 토글하고 스크롤 관리를 위임
+  if (otherOverlayStore.getData().open) {
+    document.body.classList.toggle("overflow-hidden", open);
+    return;
+  }
+
+  if (open) {
+    scrollPosition.current = document.documentElement.scrollTop; // 현재 스크롤 위치 저장
+    document.body.classList.add("overflow-hidden"); // body에 overflow-hidden 적용
+    document.body.style.top = `-${scrollPosition.current}px`; // body를 위로 당겨 스크롤 위치 유지
+  } else {
+    document.body.classList.remove("overflow-hidden"); // body에서 클래스 제거
+    document.body.style.top = ""; // top 스타일 초기화
+    scrollTo(0, scrollPosition.current); // 저장된 스크롤 위치로 복원
+    scrollPosition.current = 0; // 스크롤 위치 초기화
+  }
+}, [open, otherOverlayStore]); // open 상태와 otherOverlayStore 변경 시 훅 재실행
+```
+
+**핵심 동작:**
+
+- `useRef`로 스크롤 위치 저장
+- 모달 열림 시: `body`에 `position: fixed`와 `top` 값 적용
+- 모달 닫힘 시: 스타일 제거 후 `scrollTo()`로 위치 복원
+- 여러 오버레이가 동시에 열릴 경우 전역 상태로 중복 처리 방지
+
+### 2. 드로어 컴포넌트 (라우터 연동)
+
+```javascript
+// Drawer.tsx
+const scrollPosition = useRef(0); // 스크롤 위치 저장을 위한 useRef
+
+useEffect(() => {
+  if (open) {
+    // 드로어 열림 시, 라우터 hash를 변경하고 스크롤 위치 저장 및 body 고정
+    const { pathname, search } = window.location;
+    router.push(`${pathname}${search}#drawer-open`, { scroll: false }); // 라우터에 hash 추가 (스크롤 방지)
+    initializeDrawer(); // 드로어 초기화 등 추가 로직
+    scrollPosition.current = document.documentElement.scrollTop; // 현재 스크롤 위치 저장
+    document.body.classList.add("overflow-hidden"); // body에 overflow-hidden 적용
+    document.body.style.top = `-${scrollPosition.current}px`; // body를 위로 당겨 스크롤 위치 유지
+  } else {
+    // 드로어 닫힘 시
+    drawerStore.setData({ value: "", step: 1 }); // 드로어 상태 초기화
+    formData.current = {}; // 폼 데이터 초기화
+
+    if (window.location.hash === "#drawer-open") {
+      router.back(); // 라우터 뒤로 가기
+
+      // 라우터 이동 후 DOM 업데이트가 완료될 시간을 기다린 후 스크롤 복구
+      setTimeout(() => {
+        document.body.classList.remove("overflow-hidden"); // body에서 클래스 제거
+        document.body.style.top = ""; // top 스타일 초기화
+        scrollTo(0, scrollPosition.current); // 저장된 스크롤 위치로 되돌림
+        scrollPosition.current = 0; // 스크롤 위치 초기화
+      }, 200); // 200ms 딜레이
+    } else {
+      // 해시가 없는 경우 (예: 직접 닫기 버튼 클릭) 지연 없이 스크롤 복구
+      setTimeout(() => {
+        document.body.classList.remove("overflow-hidden");
+        document.body.style.top = "";
+        scrollTo(0, scrollPosition.current);
+        scrollPosition.current = 0;
+      }, 0);
+    }
+  }
+}, [open, initializeDrawer, router]); // open, initializeDrawer, router 변경 시 훅 재실행
+```
+
+**핵심 차이점:**
+
+- URL 해시로 드로어 상태 관리 (`#drawer-open`)
+- 라우터 이동(`router.back()`) 후 DOM 업데이트 대기를 위해 `setTimeout` 사용
+- 라우터 이벤트 유무에 따라 딜레이 조절 (200ms vs 0ms)
+
+**왜 200ms인가?**
+
+200ms는 경험적으로 찾은 값입니다. 대부분의 모던 브라우저에서 라우터 히스토리 이동과 DOM 업데이트가 완료되는 데 충분한 시간이지만, 사용자가 눈치챌 정도로 긴 지연은 아닙니다. 그러나 이 값은 브라우저나 기기 성능에 따라 최적값이 다를 수 있습니다.
+
+**더 나은 대안**
+
+`setTimeout` 대신 더 정확한 타이밍을 보장하는 방법들도 고려할 수 있습니다:
+
+- **라우터 이벤트 활용**: Next.js의 경우 `router.events`를 구독하여 `routeChangeComplete` 이벤트에서 스크롤 복구를 실행할 수 있습니다.
+
+```javascript
+useEffect(() => {
+  const handleRouteChange = () => {
+    document.body.classList.remove("overflow-hidden");
+    document.body.style.top = "";
+    scrollTo(0, scrollPosition.current);
+  };
+  router.events.on("routeChangeComplete", handleRouteChange);
+  return () => router.events.off("routeChangeComplete", handleRouteChange);
+}, []);
+```
+
+- **requestAnimationFrame**: 브라우저의 다음 리페인트 전에 스크롤 복구를 실행하여 더 부드러운 전환을 보장할 수 있습니다.
+
+```javascript
+requestAnimationFrame(() => {
+  document.body.classList.remove("overflow-hidden");
+  document.body.style.top = "";
+  requestAnimationFrame(() => {
+    scrollTo(0, scrollPosition.current);
+  });
+});
+```
+
+- **MutationObserver**: DOM 변경을 감지하여 정확한 시점에 스크롤 복구를 실행할 수 있지만, 오버헤드가 클 수 있으므로 신중하게 사용해야 합니다.
+
+### 3. CSS 스타일
+
+```css
+// globals.css
+body {
+  // ...
+  &.overflow-hidden {
+    position: fixed; /* body를 뷰포트에 고정 */
+    overflow: hidden; /* 넘치는 내용 숨김 (스크롤 방지) */
+    width: 100%; /* 고정된 body의 너비를 100%로 유지 */
+    /* top 속성은 JavaScript에서 동적으로 설정됨 */
+  }
+}
+
+// header.css
+.header {
+  position: fixed;
+  display: flex;
+  width: 100%;
+  top: 0; /* 헤더를 항상 화면 최상단에 고정 */
+  left: 0;
+  padding: var(--spacing-base);
+  flex-direction: column;
+  // ...
+}
+```
+
+**주요 속성:**
+
+- `position: fixed` + `overflow: hidden` + `width: 100%` 조합으로 body 고정
+- 헤더에 명시적인 `top: 0` 추가로 레이아웃 안정성 확보
+
+## 주의사항 및 트레이드오프
+
+`position: fixed`를 `body`에 적용하는 이 해결책은 효과적이지만, 몇 가지 알아두어야 할 사이드이펙트와 고려사항이 있습니다.
+
+### 1. 레이아웃 점프 (Layout Shift)
+
+`position: fixed`가 적용되면 요소가 문서 흐름에서 제거되므로, 순간적인 레이아웃 변화가 발생할 수 있습니다. 이를 방지하기 위해 `width: 100%`를 명시적으로 설정했지만, 스크롤바가 있던 경우 스크롤바 너비(보통 15px)만큼 콘텐츠가 오른쪽으로 밀리는 현상이 발생할 수 있습니다.
+
+**해결 방법**: 모달이 열릴 때 스크롤바 너비를 계산하여 `padding-right`로 보상할 수 있습니다.
+
+```javascript
+const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+document.body.style.paddingRight = `${scrollbarWidth}px`;
+```
+
+### 2. 모바일 브라우저 주소창/뷰포트 변화
+
+iOS Safari 같은 모바일 브라우저는 스크롤 시 주소창이 숨겨지면서 뷰포트 높이가 동적으로 변합니다. `position: fixed`를 사용하면 이러한 동적 높이 변화가 제대로 반영되지 않을 수 있습니다.
+
+**해결 방법**: CSS 변수 `100vh` 대신 `100dvh`(dynamic viewport height)를 사용하거나, JavaScript로 실제 뷰포트 높이를 계산하여 적용할 수 있습니다.
+
+### 3. 키보드 포커스 및 접근성
+
+모달이 열렸을 때 `body`가 고정되면, 스크린 리더 사용자나 키보드 네비게이션 사용자가 혼란을 겪을 수 있습니다. 모달 외부의 콘텐츠가 여전히 포커스 가능한 상태로 남아있을 수 있기 때문입니다.
+
+**해결 방법**:
+
+- 모달이 열릴 때 `aria-hidden="true"`를 모달 외부 콘텐츠에 적용
+- Focus trap 패턴을 구현하여 포커스가 모달 내부에만 머물도록 제어
+- `inert` 속성을 사용하여 모달 외부를 비활성화 (최신 브라우저 지원)
+
+### 4. iOS 특이 케이스: 터치 이벤트와 관성 스크롤
+
+iOS에서는 `position: fixed`만으로는 터치 이벤트를 통한 스크롤을 완전히 막지 못하는 경우가 있습니다. 특히 모달 내부에 스크롤 가능한 콘텐츠가 있을 때, 관성 스크롤(momentum scrolling)이 배경까지 전파될 수 있습니다.
+
+**해결 방법**:
+
+- CSS `-webkit-overflow-scrolling: touch`를 모달 내부 스크롤 영역에 적용
+- `touchmove` 이벤트를 모달 외부에서 `preventDefault()`로 차단 (단, 이는 접근성 문제를 일으킬 수 있으므로 신중히 사용)
+
+### 5. 성능 고려사항
+
+`position: fixed`는 새로운 합성 레이어(compositing layer)를 생성하므로, 메모리 사용량이 증가할 수 있습니다. 특히 `body` 전체에 적용하면 모든 자식 요소가 영향을 받을 수 있습니다. 대부분의 경우 문제가 되지 않지만, 매우 복잡한 페이지나 저사양 기기에서는 성능 저하를 고려해야 합니다.
+
+## 마치며
+
+이 방식으로 구형 Safari를 포함한 다양한 브라우저에서 모달/드로어 사용 시 발생하는 스크롤 문제를 해결할 수 있었습니다. `document.body` 제어와 `position: fixed`의 조합은 간단하지만 효과적인 해결책입니다.
+
+다만 `setTimeout`의 딜레이 값은 환경에 따라 조정이 필요할 수 있으며, 접근성(포커스 관리 등)과 성능 측면에서 추가 개선의 여지가 있습니다. 브라우저 호환성 문제는 "대부분 잘 되니까"보다는 예외 케이스를 고려한 견고한 구현이 중요하다는 것을 다시 한번 느꼈습니다.
+
+---
+
+## 참고 자료
+
+- [MDN Web Docs - overflow](https://developer.mozilla.org/ko/docs/Web/CSS/overflow)
+- [MDN Web Docs - position](https://developer.mozilla.org/ko/docs/Web/CSS/position)
+- [UDN Web Docs - overflow-scrolling](https://udn.realityripple.com/docs/Web/CSS/-webkit-overflow-scrolling)
