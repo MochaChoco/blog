@@ -413,7 +413,7 @@ export async function POST(request: NextRequest) {
       });
       break;
 
-    case "easy-pay-c":
+    case "easy-pay-b":
       methodType = "EASY_PAY_B";
       returnParams = formData.get("returnParams")?.toString() ?? null;
       break;
