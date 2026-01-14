@@ -10,18 +10,20 @@ export default async function TagsPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-10">
       <div className="space-y-4">
-        <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
+        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
           Tags
         </h1>
-        <p className="text-xl text-muted-foreground">Browse posts by topic.</p>
+        <p className="text-lg text-muted-foreground sm:text-xl">
+          Browse posts by topic.
+        </p>
       </div>
       <hr />
-      <div className="flex flex-wrap gap-4">
+      <div className="flex flex-wrap gap-3 sm:gap-4">
         {tags.map((tag) => (
           <Link
             key={tag}
             href={`/tags/${tag}`}
-            className="px-4 py-2 bg-secondary rounded-lg hover:bg-secondary/80 transition-colors text-lg font-medium"
+            className="rounded-lg bg-secondary px-3 py-1.5 text-base font-medium transition-colors hover:bg-secondary/80 sm:px-4 sm:py-2 sm:text-lg"
           >
             #{tag}
           </Link>

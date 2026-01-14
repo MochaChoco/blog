@@ -11,8 +11,8 @@ export function PostCard({ post }: { post: PostMeta }) {
 
   return (
     <Link href={`/posts/${post.slug}`}>
-      <article className="group relative flex gap-4 cursor-pointer transition-transform hover:scale-[1.02]">
-        <div className="flex-shrink-0 w-48 h-32 relative overflow-hidden rounded-lg">
+      <article className="group relative flex flex-col gap-4 cursor-pointer transition-transform hover:scale-[1.02] sm:flex-row">
+        <div className="relative h-48 w-full overflow-hidden rounded-lg sm:h-32 sm:w-48 sm:flex-shrink-0">
           <Image
             src={coverImage}
             alt={post.frontmatter.title}
@@ -21,17 +21,17 @@ export function PostCard({ post }: { post: PostMeta }) {
           />
         </div>
         <div className="flex flex-col space-y-2 flex-1">
-          <h2 className="text-2xl font-bold tracking-tight group-hover:text-primary transition-colors">
+          <h2 className="text-xl font-bold tracking-tight group-hover:text-primary transition-colors sm:text-2xl">
             {post.frontmatter.title}
           </h2>
-          <div className="flex gap-2 text-sm text-muted-foreground">
+          <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
             {post.frontmatter.tags?.map((tag) => (
               <span key={tag} className="bg-secondary px-2 py-1 rounded-md">
                 #{tag}
               </span>
             ))}
           </div>
-          <p className="text-muted-foreground line-clamp-3">
+          <p className="text-sm text-muted-foreground line-clamp-3 sm:text-base">
             {post.frontmatter.description}
           </p>
         </div>

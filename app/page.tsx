@@ -10,10 +10,10 @@ export default async function Home() {
   return (
     <div className="space-y-10 max-w-4xl mx-auto">
       <div className="space-y-4">
-        <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
+        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
           Latest Posts
         </h1>
-        <p className="text-xl text-muted-foreground">
+        <p className="text-lg text-muted-foreground sm:text-xl">
           Writing about technology, coding, and everything in between.
         </p>
       </div>

@@ -10,10 +10,10 @@ export default async function SearchPage() {
   return (
     <div className="space-y-10 max-w-4xl mx-auto">
       <div className="space-y-4">
-        <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
+        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
           Search
         </h1>
-        <p className="text-xl text-muted-foreground">
+        <p className="text-lg text-muted-foreground sm:text-xl">
           Find posts by title, description, or tags.
         </p>
       </div>

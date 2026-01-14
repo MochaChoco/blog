@@ -89,7 +89,7 @@ const components = {
     <div className="relative group">
       <pre
         className={cn(
-          "overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 p-4 my-4 text-sm leading-6",
+          "overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 p-4 my-4 text-xs leading-6 sm:text-sm",
           className
         )}
         {...props}
@@ -122,12 +122,12 @@ export default async function PostPage({
   }
 
   return (
-    <article className="max-w-4xl lg:max-w-4xl mx-auto py-10">
+    <article className="mx-auto max-w-4xl py-8 sm:py-10">
       <div className="space-y-4 mb-10 text-center">
-        <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
+        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
           {post.frontmatter.title}
         </h1>
-        <div className="flex justify-center gap-2 text-sm text-muted-foreground">
+        <div className="flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
           {post.frontmatter.tags?.map((tag) => (
             <span key={tag} className="bg-secondary px-2 py-1 rounded-md">
               #{tag}
@@ -135,7 +135,7 @@ export default async function PostPage({
           ))}
         </div>
       </div>
-      <div className="prose max-w-none prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-a:text-blue-600 dark:prose-a:text-blue-400 dark:prose-invert">
+      <div className="prose prose-sm max-w-none prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-a:text-blue-600 dark:prose-a:text-blue-400 dark:prose-invert sm:prose-base">
         <MDXRemote
           source={post.content}
           components={components}

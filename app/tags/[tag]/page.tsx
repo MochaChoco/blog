@@ -37,10 +37,10 @@ export default async function TagPage({
   return (
     <div className="space-y-10 max-w-4xl mx-auto">
       <div className="space-y-4">
-        <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
+        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
           #{decodedTag}
         </h1>
-        <p className="text-xl text-muted-foreground">
+        <p className="text-lg text-muted-foreground sm:text-xl">
           {posts.length} {posts.length === 1 ? "post" : "posts"} found.
         </p>
       </div>
