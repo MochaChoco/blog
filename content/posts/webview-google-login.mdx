@@ -1,0 +1,507 @@
+---
+title: "웹뷰 환경에서의 구글 소셜 로그인 구현"
+description: "웹뷰의 팝업 차단과 리다이렉트 제약을 극복하고, JavaScript-Native Bridge와 Android Intent Deep Link를 활용하여 안정적인 소셜 로그인 플로우를 구현한 경험을 공유합니다."
+date: "2025-01-20"
+tags: ["frontend", "webview", "vue", "oauth", "google-login", "android"]
+slug: "webview-google-login"
+coverImage: "/images/posts/webview-google-login/cover.png"
+---
+
+![커버 이미지](/images/posts/webview-google-login/cover.png)
+
+## 웹뷰, 왜 소셜 로그인에 취약할까요?
+
+안녕하세요. 금일은 로그인 통합 사이트에서 소셜 로그인 기능을 웹뷰 환경에서 구현할때 있었던 일을 말하고자 합니다.
+
+저희 서비스는 다양한 환경에서 사용자에게 편리한 로그인 경험을 제공해야 합니다. 그중에서도 특히 웹뷰는 자체 앱 내에서 웹 콘텐츠를 보여주는 강력한 도구이지만, 일반 웹 브라우저와는 다른 여러 제약 사항을 가지고 있습니다. 기존 구글 소셜 로그인 방식은 OAuth 2.0 Authorization Code Flow를 기반으로, 주로 팝업(새 창)을 띄우거나 리다이렉션을 통해 구글 인증 페이지로 이동하여 사용자 동의를 얻고 토큰을 발급받는 형태였습니다.
+
+하지만 웹뷰 환경에서는 이러한 방식이 종종 문제를 일으켰습니다. 대표적으로 다음과 같은 제약사항들이 걸림돌이 되었습니다.
+
+*   **팝업 차단(window.open() 제한)**: 웹뷰는 보안 및 사용자 경험 제어를 위해 `window.open()`과 같은 팝업 창 생성을 기본적으로 제한하는 경우가 많습니다. 구글 OAuth 인증 과정에서 팝업이 필수적으로 사용되는데, 이 팝업이 뜨지 않으니 인증 자체가 진행될 수 없었습니다.
+*   **리다이렉트 문제**: 웹뷰 내에서 다른 도메인으로 리다이렉션되거나, 외부 브라우저로 이동 후 다시 웹뷰로 복귀하는 과정에서 웹뷰의 히스토리 스택 관리나 세션 유지가 어려워 로그인 과정이 끊기거나 토큰을 제대로 전달받지 못하는 경우가 발생했습니다.
+*   **쿠키/스토리지 제약**: 일반 브라우저와 달리 웹뷰는 타사 쿠키(third-party cookies)나 로컬 스토리지에 대한 접근이 제한되거나 정책이 달라, 구글 로그인 시 필요한 정보가 제대로 저장되거나 읽히지 않을 수 있습니다.
+*   **User-Agent 인식 문제**: 웹뷰의 User-Agent 문자열이 표준 웹 브라우저와 다르게 인식되어, 구글과 같은 외부 인증 서비스가 웹뷰 환경을 비정상적인 브라우저로 판단하고 인증을 거부하는 사례도 있었습니다.
+
+이러한 문제들 때문에, 웹뷰에서 소셜 로그인을 직접 처리하는 것은 많은 기술적 어려움을 수반했습니다. 저희는 결국 웹뷰의 제약을 우회하면서도 안정적인 로그인 흐름을 보장할 수 있는 새로운 접근 방식을 고민하게 되었습니다.
+
+## 웹뷰 환경에서의 하이브리드 로그인 플로우 설계
+
+기존 웹 방식의 한계를 극복하기 위해, 저희는 웹뷰와 네이티브 앱 간의 협업을 통해 소셜 로그인을 처리하는 하이브리드 플로우를 설계했습니다. 핵심 아이디어는 **웹뷰 내부에서는 로그인을 시작하고, 실제 구글 인증은 앱의 기능을 빌려 외부 브라우저에서 진행한 후, 다시 딥링크를 통해 웹뷰로 안전하게 복귀**시키는 것입니다.
+
+이 과정은 크게 다음의 단계들로 이루어집니다:
+
+1.  **웹뷰 환경 감지 및 외부 브라우저 호출**: 사용자가 웹뷰에서 구글 로그인 버튼을 클릭하면, 현재 환경이 웹뷰인지 감지합니다. 웹뷰로 판단되면, 네이티브 앱이 제공하는 자바스크립트 인터페이스(JS-Native Bridge)를 통해 구글 로그인 시작 URL을 네이티브 앱에 전달합니다. 네이티브 앱은 이 URL을 받아 기기의 기본 웹 브라우저(예: Chrome, Safari)로 엽니다.
+2.  **외부 브라우저에서 구글 인증 수행**: 외부 브라우저에서는 저희 서비스의 구글 로그인 처리 페이지(`ExternalLoginHandler.vue`와 같은 페이지)가 로드됩니다. 이 페이지는 Google OAuth 2.0 라이브러리를 사용하여 사용자에게 구글 로그인 팝업을 표시하고 인증을 진행합니다. 이 과정은 일반 웹에서와 동일하게 동작하며, 인증이 완료되면 Google Access Token을 획득합니다.
+3.  **딥링크를 통한 웹뷰 복귀 요청**: Google Access Token을 획득한 후, `ExternalLoginHandler.vue` 페이지는 이 토큰을 담은 안드로이드 인텐트 URI(딥링크)를 생성합니다. 이때 브라우저 보안 정책으로 인해 사용자 인터랙션 없이는 딥링크 호출이 제한될 수 있으므로, 사용자에게 "구글 인증이 완료되었습니다. 앱으로 다시 이동합니다."와 같은 메시지를 표시하고 확인 버튼을 클릭하도록 유도합니다. 사용자가 확인 버튼을 클릭하면 딥링크가 호출되어 네이티브 앱으로 복귀를 시도합니다.
+4.  **네이티브 앱의 딥링크 처리 및 웹뷰 로드**: 네이티브 앱은 미리 등록된 인텐트 필터에 따라 해당 딥링크를 수신하고, 딥링크 내 `openUrl` 파라미터에 명시된 URL(예: `/callback/social/google`)을 다시 웹뷰로 로드합니다.
+5.  **웹뷰 내 콜백 페이지 처리**: 웹뷰에 로드된 콜백 페이지(`AuthCallbackHandler.vue`와 같은 페이지)는 URL 쿼리 파라미터에서 Google Access Token을 추출하고, 이를 백엔드 API에 전달하여 최종적인 소셜 로그인 또는 회원가입 처리를 완료합니다.
+6.  **최종 서비스 페이지 리다이렉트**: 로그인/회원가입 처리 완료 후, 사용자를 서비스의 메인 대시보드(`https://myservice.com/dashboard`)로 리다이렉트합니다.
+
+이러한 흐름을 통해, 웹뷰의 제약을 우회하면서도 보안성과 사용자 경험을 유지할 수 있었습니다. 특히, `JS-Native Bridge`와 `Android Intent URI`는 이 하이브리드 플로우의 핵심적인 기술 요소로 작용했습니다.
+
+*   **JS-Native Bridge**: 웹뷰 내 JavaScript와 네이티브 앱 코드 간의 상호 호출을 가능하게 하는 메커니즘입니다. 안드로이드에서는 `addJavascriptInterface`를, iOS에서는 `WKScriptMessageHandler`를 통해 구현할 수 있습니다. 저희는 이 브리지를 통해 웹뷰에서 `window.AppBridgeInterface.initiateExternalLogin` 함수를 호출하여 네이티브 앱에게 외부 브라우저를 열도록 지시했습니다.
+*   **Android Intent URI**: 웹에서 네이티브 앱을 실행하거나 특정 액션을 요청할 때 사용되는 URI 형식입니다. `intent://` 스킴을 사용하며, `scheme`, `package`, `S.browser_fallback_url` 등의 파라미터를 통해 특정 앱을 명시하고, 앱이 없을 때의 폴백(fallback) URL까지 지정하여 견고하게 앱으로 복귀할 수 있도록 합니다.
+
+그리고 무엇보다 중요한 것은 딥링크 내부에 포함될 URL 파라미터들의 `URL Encoding`입니다. URL에는 특정 특수문자가 포함될 수 있는데, 이를 인코딩하지 않으면 딥링크가 올바르게 파싱되지 않아 문제가 발생할 수 있습니다. `encodeURIComponent()` 함수를 사용하여 안전하게 인코딩하는 것이 필수적입니다.
+
+## 전체 플로우 다이어그램
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      웹뷰 구글 소셜 로그인 전체 플로우                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+1. [웹뷰] 사용자가 구글 로그인 버튼 클릭
+   └─> SocialLoginButton.vue
+       └─> window.WebViewBridge?.openExternalBrowser 존재 여부 확인
+           │
+           ├─ (웹뷰 환경) → openExternalBrowser(baseUrl + '/auth/external/google')
+           │                 └─> 네이티브 앱이 외부 브라우저로 URL 열기
+           │
+           └─ (일반 웹) → Google GSI 스크립트 로드 → 팝업 인증
+
+2. [외부 브라우저] /auth/external/google 페이지 로드
+   └─> ExternalAuthView.vue
+       └─> Google GSI 스크립트 자동 로드
+           └─> requestAccessToken() 호출 (구글 인증 팝업)
+               └─> 사용자 구글 계정 선택 및 동의
+                   └─> onLoggedInHandler(tokenResponse)
+                       └─> Access Token 획득
+                           └─> Intent URI 생성:
+                               intent://callback?openUrl=<콜백URL>#Intent;
+                               scheme=myapp;
+                               package=com.example.app;
+                               S.browser_fallback_url=<콜백URL>;end;
+
+3. [외부 브라우저] 사용자 인터랙션
+   └─> showConfirmDialog("구글 인증이 완료되었습니다. 앱으로 다시 이동합니다.")
+       └─> 사용자 "확인" 버튼 클릭
+           └─> window.location.href = intentUrl
+               └─> Android 시스템이 Intent URI 처리
+
+4. [네이티브 앱] 딥링크 수신
+   └─> myapp://callback?openUrl=<인코딩된 콜백 URL>
+       └─> onNewIntent() 메서드 호출
+           └─> openUrl 파라미터 추출 (URL 디코딩)
+               └─> webView.loadUrl(decodedOpenUrl)
+                   └─> /auth/callback/google?token=...
+
+5. [웹뷰] 콜백 페이지 로드
+   └─> AuthCallbackView.vue
+       └─> route.query에서 token 추출
+           └─> social.login('GOOGLE', token)
+               └─> userStore.socialLogin(provider, token)
+                   └─> POST /api/auth/social/login
+                       │   Body: { provider: 'GOOGLE', socialToken: token }
+                       │
+                       ├─ (성공) → window.location.href = 'https://myservice.com/dashboard'
+                       │
+                       └─ (실패) → checkSocialAccount()
+                                    └─> GET /api/auth/social/check?provider=...&token=...
+                                        │
+                                        ├─ (신규) → /signup 페이지로 이동
+                                        ├─ (이메일 중복) → 안내 메시지 표시
+                                        └─ (기타 오류) → 에러 처리
+
+6. [웹뷰] 최종 리다이렉트
+   └─> https://myservice.com/dashboard
+       └─> 로그인 완료 상태로 대시보드 페이지 로드
+```
+
+## 구현 포인트: 웹뷰와 외부 브라우저 연동
+
+실제 코드 레벨에서는 어떤 변화가 있었는지 `SocialLoginButton` 컴포넌트와 `ExternalLoginHandler` 페이지의 주요 변경점을 중심으로 살펴보겠습니다.
+
+### 1. 웹뷰 전용 로그인 플로우 진입점 분기 처리
+
+소셜 로그인 버튼 컴포넌트에서 웹뷰 환경을 감지하고 로그인 플로우를 분기합니다.
+
+```vue 
+<script setup>
+import { ref } from 'vue'
+import { SocialAuth } from '@/api/socialAuth'
+import { useSocial } from '@/composables/social'
+
+const social = useSocial()
+const tokenClient = ref(null)
+
+// 웹뷰 환경 감지: WebViewBridge 인터페이스 존재 여부 확인
+const isWebViewEnvironment =
+  typeof window !== 'undefined' && window?.WebViewBridge?.openExternalBrowser
+
+const onScriptLoaded = (event = null) => {
+  if (!event) return
+
+  try {
+    // Google GSI 토큰 클라이언트 초기화
+    tokenClient.value = SocialAuth.Google.init(
+      import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      onLoggedInHandler
+    )
+    tokenClient.value.requestAccessToken()
+  } catch (error) {
+    console.log('google script load error', error)
+    alert('error')
+  }
+}
+
+const onLoggedInHandler = async (tokenResponse) => {
+  // 일반 웹 환경에서 구글 로그인 성공 시
+  await social.login('GOOGLE', tokenResponse.access_token)
+}
+
+const onClickHandler = () => {
+  // 웹뷰 환경인 경우
+  if (isWebViewEnvironment) {
+    const baseUrl = window.location.origin // 현재 도메인
+    const url = '/auth/external/google' // 외부 브라우저에서 열 페이지
+    // 네이티브 앱에 외부 브라우저 열기 요청
+    window?.WebViewBridge?.openExternalBrowser(baseUrl + url)
+    return
+  }
+
+  // 일반 웹 환경인 경우: Google GSI 스크립트 동적 로드
+  try {
+    const script = document.createElement('script')
+    script.onload = onScriptLoaded
+    script.onerror = () => handleError('script_load_failed')
+    script.type = 'text/javascript'
+    script.src = 'https://accounts.google.com/gsi/client'
+    document.head.appendChild(script)
+  } catch (error) {
+    console.log('google script error', error)
+    handleError('script_error')
+  }
+}
+</script>
+```
+
+**핵심 구현 사항:**
+
+1. **웹뷰 환경 자동 감지**
+   - `window.WebViewBridge.openExternalBrowser` 함수의 존재 여부로 웹뷰 환경 판단
+   - 별도의 URL 파라미터나 설정 없이 JavaScript 인터페이스만으로 감지
+   - 이 방식으로 웹과 웹뷰 환경에서 동일한 코드베이스 사용 가능
+
+2. **플로우 분기 로직**
+   - **웹뷰 환경**: `/auth/external/google` 페이지를 외부 브라우저로 열도록 네이티브 앱에 요청
+   - **일반 웹**: Google GSI 스크립트를 동적으로 로드하고 팝업 방식으로 인증 진행
+
+### 2. 외부 브라우저에서 구글 인증 및 딥링크 호출
+
+외부 브라우저에서 구글 인증을 수행하는 페이지의 실제 구현입니다.
+
+```vue
+<script setup>
+import { onMounted, ref } from 'vue'
+import { SocialAuth } from '@/api/socialAuth'
+
+let tokenClient = null // ref 대신 일반 변수 사용 (Google API와의 충돌 방지)
+
+const onScriptLoaded = (event = null) => {
+  if (!event) return
+
+  try {
+    // Google GSI 토큰 클라이언트 초기화
+    tokenClient = SocialAuth.Google.init(
+      import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      onLoggedInHandler,
+      onErrorHandler
+    )
+    tokenClient.requestAccessToken() // 페이지 로드 즉시 Access Token 요청
+  } catch (error) {
+    console.log('google script load error', error)
+    alert('error')
+  }
+}
+
+const onErrorHandler = (errorResponse) => {
+  console.log('google auth error:', errorResponse)
+
+  // 팝업 차단 또는 닫힘 감지
+  if (errorResponse.type === 'popup_closed' || errorResponse.type === 'popup_failed_to_open') {
+    alert('popup_blocked')
+    return
+  }
+
+  alert('error')
+}
+
+const onLoggedInHandler = async (tokenResponse) => {
+  // 구글 Access Token 획득 성공 시
+  const baseUrl = window.location.origin // 현재 도메인
+  const path = '/auth/callback/google?token=' + tokenResponse.access_token
+  const fullUrl = baseUrl + path
+
+  // Android Intent URI (딥링크) 생성
+  const intentUrl = `intent://callback?openUrl=${encodeURIComponent(
+    fullUrl
+  )}#Intent;scheme=myapp;package=com.example.app;S.browser_fallback_url=${encodeURIComponent(
+    fullUrl
+  )};end;`
+
+  console.log('redirect to intentUrl:', intentUrl)
+
+  // 브라우저 보안 정책을 위한 사용자 인터랙션 유도
+  showConfirmDialog({
+    title: '인증 완료',
+    message: '구글 인증이 완료되었습니다.<br/>앱으로 다시 이동합니다.',
+    onConfirm: () => {
+      window.location.href = intentUrl
+    }
+  })
+}
+
+onMounted(() => {
+  // 페이지 로드 시 즉시 Google GSI 스크립트 로드 및 인증 시작
+  const script = document.createElement('script')
+  script.onload = onScriptLoaded
+  script.onerror = () => alert('error')
+  script.type = 'text/javascript'
+  script.src = 'https://accounts.google.com/gsi/client'
+  document.head.appendChild(script)
+})
+</script>
+```
+
+**핵심 구현 사항:**
+
+1. **자동 인증 시작**
+   - 페이지 로드 시 Google GSI 스크립트를 자동으로 로드
+   - 스크립트 로드 완료 즉시 `requestAccessToken()` 호출하여 인증 팝업 표시
+   - 사용자가 별도의 버튼 클릭 없이 바로 구글 로그인 진행
+
+2. **Android Intent URI 생성**
+   - `scheme`: `myapp` (앱에 등록한 커스텀 스킴)
+   - `host`: `callback` (앱 내에서 정의한 딥링크 호스트)
+   - `openUrl` 파라미터: 웹뷰에서 로드할 콜백 URL (URL 인코딩)
+   - `package`: `com.example.app` (특정 앱 패키지 명시)
+   - `S.browser_fallback_url`: 앱이 없을 경우 대체 URL
+
+3. **사용자 인터랙션 필수**
+   - 브라우저 보안 정책상 사용자 클릭 없이는 딥링크 실행 불가
+   - `showConfirmDialog`로 확인 다이얼로그 표시
+   - 사용자가 "확인" 클릭 시 Intent URI로 이동하여 앱 복귀
+
+4. **에러 처리**
+   - 팝업 차단 감지 (`popup_closed`, `popup_failed_to_open`)
+   - 스크립트 로딩 실패 처리
+   - 각 에러 상황에 맞는 사용자 안내 메시지 표시
+
+### 3. 웹뷰 복귀 후 콜백 처리 및 백엔드 연동
+
+딥링크로 앱에 복귀한 후 웹뷰에서 로드되는 콜백 페이지의 구현입니다.
+
+```vue
+<!-- views/AuthCallbackView.vue -->
+<script setup>
+import { onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useSocial } from '@/composables/social'
+
+const route = useRoute()
+const router = useRouter()
+const social = useSocial()
+
+onMounted(async () => {
+  const { token } = route.query
+
+  console.log('AuthCallbackView received:', { token })
+
+  if (!token) {
+    showErrorDialog({
+      message: '잘못된 접근입니다.',
+      onConfirm: () => {
+        router.replace('/')
+      }
+    })
+    return
+  }
+
+  // 백엔드 소셜 로그인 API 호출
+  await social.login('GOOGLE', token)
+})
+</script>
+```
+
+**핵심 구현 사항:**
+
+1. **쿼리 파라미터 추출**
+   - `token`: Google Access Token
+
+2. **백엔드 API 호출**
+   - `social.login()`: `/api/auth/social/login` API 호출
+   - Google Access Token으로 사용자 인증 및 로그인 처리
+   - 기존 회원이면 로그인, 신규면 회원가입 플로우로 이동
+
+3. **로그인 성공 후 리다이렉트**
+   - 로그인 완료 후 `https://myservice.com/dashboard`로 자동 이동
+
+### 4. 소셜 로그인 비즈니스 로직
+
+Composable에서 소셜 로그인 비즈니스 로직을 처리합니다.
+
+```javascript
+import { useUserStore } from '@/stores/user'
+import { useAuthStore } from '@/stores/auth'
+import * as authApi from '@/api/auth'
+
+export function useSocial() {
+  const userStore = useUserStore()
+  const authStore = useAuthStore()
+
+  async function login(provider, token) {
+    try {
+      // 백엔드 소셜 로그인 API 호출
+      await userStore.socialLogin(provider, token)
+
+      // 로그인 성공 시 대시보드로 리다이렉트
+      window.location.href = 'https://myservice.com/dashboard'
+    } catch (err) {
+      console.error('Social Login Error', err)
+
+      // 로그인 실패 시 회원가입 필요 여부 확인
+      await handleLoginFailure(provider, token)
+    }
+  }
+
+  async function handleLoginFailure(provider, token) {
+    // 에러 상황별 처리
+    // ...
+  }
+
+  return { login, linkAccount, unlinkAccount }
+}
+```
+
+**핵심 구현 사항:**
+
+1. **백엔드 API 연동**
+   - `/api/auth/social/login`: 소셜 로그인 API
+   - `/api/auth/social/check`: 소셜 계정 존재 여부 확인 API
+   - Provider와 Social Token을 전달하여 인증
+
+2. **에러 처리 및 회원가입 플로우**
+   - 로그인 실패 시 다양한 케이스별 처리
+   - 신규 사용자는 회원가입 페이지로 이동
+   - 이메일 중복, 소셜 계정 이미 연동 등 상황별 안내
+
+3. **로그인 성공 후처리**
+   - `window.location.href = 'https://myservice.com/dashboard'`: 대시보드로 리다이렉트
+   - 세션 저장 및 사용자 정보 Store에 저장
+
+## 결과 및 효과, 그리고 남은 과제
+
+### 달성한 성과
+
+이번 웹뷰 환경에서의 구글 소셜 로그인 플로우 개선 작업을 통해 다음과 같은 성과를 달성했습니다:
+
+1. **웹뷰 팝업 차단 문제 완전 해결**
+   - 다양한 웹뷰 환경에서 구글 로그인 불가 문제 해결
+   - 외부 브라우저 + 딥링크 방식으로 안정적인 인증 플로우 구현
+
+2. **단일 코드베이스 유지**
+   - `window.WebViewBridge.openExternalBrowser` 존재 여부만으로 웹뷰 자동 감지
+   - 일반 웹과 웹뷰 환경 모두 동일한 컴포넌트로 처리
+   - 별도의 분기된 코드나 설정 불필요
+
+### 테스트 결과
+
+다양한 환경에서 철저한 테스트를 진행했습니다:
+
+*   **일반 웹 브라우저 (Chrome, Safari, Edge)**
+    - Google GSI 라이브러리를 통한 팝업 기반 로그인 정상 동작
+    - 기존 기능에 영향 없음 확인
+
+*   **안드로이드 웹뷰 환경**
+    - `WebViewBridge.openExternalBrowser()` 호출 → 외부 브라우저 열기
+    - 구글 인증 완료 → 사용자 확인 얼럿 → Intent 딥링크 실행
+    - 앱 복귀 → `/auth/callback/google` 로드 → 백엔드 로그인 API 호출
+    - 최종 `https://myservice.com/dashboard`로 리다이렉트
+    - 전체 플로우 안정적으로 동작 확인
+
+*   **다양한 디바이스 및 OS 버전**
+    - Android 9, 10, 11, 12, 13 등 다양한 버전에서 테스트
+    - 여러 제조사 기기에서 정상 동작 확인
+
+### 주요 기술적 도전과 해결
+
+1. **브라우저 보안 정책 대응**
+   - **문제**: 딥링크 자동 호출 시 브라우저 보안 정책으로 차단
+   - **해결**: 사용자 확인 얼럿 추가 → 명시적인 클릭 이벤트로 딥링크 실행
+
+2. **URL 인코딩 이슈**
+   - **문제**: URL 파라미터에 특수문자 포함 시 딥링크 파싱 오류
+   - **해결**: `encodeURIComponent()` 사용한 철저한 URL 인코딩
+
+3. **Google API와 Vue Reactivity 충돌**
+   - **문제**: `ref(tokenClient)`로 선언 시 Google API 내부 오류 발생
+   - **해결**: `let tokenClient = null`로 일반 변수 사용
+
+4. **딥링크 특정 앱 타겟팅**
+   - **문제**: 여러 앱이 동일한 스킴 등록 시 충돌 가능성
+   - **해결**: `package=com.example.app` 명시적 지정
+
+### 남은 과제 및 향후 개선 방향
+
+1. **iOS 웹뷰 환경 지원**
+   - 현재는 Android Intent URI 기반 구현
+   - iOS Universal Links 또는 Custom URL Schemes 방식 추가 필요
+   - `window.webkit.messageHandlers` 활용한 iOS 브리지 구현 필요
+
+2. **다중 파트너 앱 지원**
+   - 현재 `package` 파라미터가 하드코딩됨
+   - 동적으로 앱 패키지 식별 및 딥링크 생성 로직 필요
+   - 쿼리 파라미터로 앱 식별자 전달 방식 검토
+
+3. **에러 모니터링 및 로깅 강화**
+   - 각 단계별 성공/실패 이벤트 트래킹
+   - 구글 인증 실패, 딥링크 호출 실패 등 상세 로그 수집
+   - 사용자 경험 개선을 위한 데이터 분석
+
+4. **보안 강화**
+   - Access Token을 URL 쿼리 파라미터로 전달하는 방식 개선
+   - 토큰 암호화 또는 일회성 코드 교환 방식 검토 (코드 주석 TODO 참조)
+   - PKCE(Proof Key for Code Exchange) 적용 검토
+
+## 배운 점
+
+이번 프로젝트를 통해 웹뷰는 단순한 브라우저가 아닌 제약이 많은 샌드박스 환경이라는 점을 명확히 이해하게 되었습니다. 웹뷰의 한계를 극복하기 위해서는 `window.WebViewBridge` 인터페이스를 통한 네이티브 앱과의 협업이 필수적이었으며, 웹 개발자와 앱 개발자 간의 명확한 인터페이스 정의가 얼마나 중요한지 알게 되었습니다.
+
+Android Intent URI Deep Link의 구조와 `encodeURIComponent()`를 통한 철저한 URL 인코딩의 중요성을 깨달았습니다. 또한 브라우저 보안 정책으로 인해 사용자 인터랙션을 통한 명시적 동의가 필요했으며, 이 과정에서 보안과 사용자 경험 사이의 적절한 균형점을 찾는 것이 중요하다는 것을 배웠습니다.
+
+아키텍처 측면에서는 환경별 분기를 최소화하는 설계와 명확한 책임 분리가 핵심이었습니다. 인터페이스 존재 여부만으로 환경을 감지하여 일반 웹과 웹뷰 환경에서 동일한 코드베이스를 사용할 수 있었고, 각 컴포넌트의 역할을 명확히 분리하여 유지보수성을 확보할 수 있었습니다.
+
+## 결론
+
+웹뷰 환경에서의 소셜 로그인은 일반 웹 개발과는 다른 접근이 필요한 도전적인 과제입니다. JavaScript-Native Bridge와 Android Intent Deep Link를 활용한 하이브리드 접근 방식을 통해 웹뷰의 제약을 극복하고, 안정적이고 보안성 있는 인증 플로우를 구현할 수 있었습니다.
+
+이번 프로젝트를 통해 단순히 기능을 구현하는 것을 넘어, **플랫폼의 제약을 이해하고 창의적인 해결책을 설계하는 능력**의 중요성을 깨달았습니다. 또한 명확한 문서화와 협업을 통해 복잡한 시스템도 효과적으로 구축할 수 있음을 경험했습니다.
+
+이러한 패턴은 다양한 소셜 로그인 제공자(네이버, 카카오, 페이스북 등)와 외부 서비스 연동(본인인증, 결제 등)에도 동일하게 적용할 수 있어, 웹뷰 환경에서의 통합 인증 시스템 구축에 실질적인 가이드가 될 것입니다.
+
+## 참고 자료
+
+### 공식 문서
+
+*   **Google Sign-In for Web**: [Google Identity Services](https://developers.google.com/identity/gsi/web)
+*   **OAuth 2.0 Authorization Code Flow**: [RFC 6749, Section 1.3.1](https://www.rfc-editor.org/rfc/rfc6749#section-1.3.1)
+*   **Android Intent URI**: [Android Developers - Intents and Intent Filters](https://developer.android.com/guide/components/intents-filters)
+*   **Android Deep Links**: [Android Developers - Create Deep Links](https://developer.android.com/training/app-links/deep-linking)
+
+### WebView 관련
+
+*   **Android WebView**: [Build web apps in WebView](https://developer.android.com/develop/ui/views/webview)
+*   **JavaScript Interface**: [WebView addJavascriptInterface](https://developer.android.com/develop/ui/views/webview/evaluate-javascript)
+*   **Chrome Custom Tabs**: [Chrome Custom Tabs Overview](https://developer.chrome.com/docs/android/custom-tabs/overview/)
+
+### 보안 및 인코딩
+
+*   **URL Encoding**: [MDN - encodeURIComponent()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent)
+*   **PKCE (OAuth 보안 강화)**: [RFC 7636 - Proof Key for Code Exchange](https://www.rfc-editor.org/rfc/rfc7636)
+
+### Vue 3 & Pinia
+
+*   **Vue 3 Composition API**: [Vue.js Official Guide](https://vuejs.org/guide/extras/composition-api-faq.html)
+*   **Pinia**: [Getting Started with Pinia](https://pinia.vuejs.org/getting-started.html)
+ 
