@@ -41,6 +41,10 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build:export
+      - name: Debug output
+        run: |
+          ls -la
+          ls -la out
       - name: Add .nojekyll file
         run: touch ./out/.nojekyll
       - name: Upload artifact
