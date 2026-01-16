@@ -25,20 +25,10 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-      - name: Debug config files (after checkout)
-        run: |
-          ls -la next.config.*
-          git status -sb
-          if [ -f next.config.js ]; then sed -n '1,200p' next.config.js; fi
       - name: Setup Pages
         uses: actions/configure-pages@v3
         with:
           static_site_generator: next
-      - name: Debug config files (after setup pages)
-        run: |
-          ls -la next.config.*
-          git status -sb
-          if [ -f next.config.js ]; then sed -n '1,200p' next.config.js; fi
       - name: Restore cache
         uses: actions/cache@v4
         with:
@@ -49,10 +39,6 @@ jobs:
             ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}-
       - name: Install dependencies
         run: npm ci
-      - name: Debug config files (after install)
-        run: |
-          ls -la next.config.*
-          git status -sb
       - name: Ensure TS config is used
         run: |
           if [ -f next.config.js ]; then
@@ -61,18 +47,6 @@ jobs:
           fi
       - name: Build
         run: npm run build:export
-      - name: Debug config files (after build)
-        run: |
-          ls -la next.config.*
-          git status -sb
-      - name: Debug git
-        run: |
-          git rev-parse HEAD
-          git status -sb
-      - name: Debug output
-        run: |
-          ls -la
-          ls -la out || true
       - name: Add .nojekyll file
         run: touch ./out/.nojekyll
       - name: Upload artifact
