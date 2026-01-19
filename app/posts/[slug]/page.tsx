@@ -1,6 +1,7 @@
 import { getAllPosts, getPostBySlug } from "@/lib/posts";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import rehypePrettyCode from "rehype-pretty-code";
+import { rehypeBasePath } from "@/lib/rehype-base-path";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { CopyButton } from "@/components/copy-button";
@@ -166,6 +167,7 @@ export default async function PostPage({
                     keepBackground: true,
                   },
                 ],
+                rehypeBasePath,
               ],
             },
           }}
