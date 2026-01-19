@@ -1,0 +1,250 @@
+---
+title: "Infinite Scroll 최적화: DOM 재사용으로 대용량 리스트 처리하기"
+description: "Intersection Observer와 DOM 재사용(버퍼링) 전략으로 무한 스크롤에서 발생하는 성능 문제를 개선한 구현 과정을 정리합니다."
+date: "2024-05-16"
+tags: ["vue", "performance", "infinite-scroll", "intersection-observer"]
+slug: "infinity-scroll"
+coverImage: "/images/posts/infinity-scroll/cover.gif"
+---
+
+<img
+  src="/images/posts/infinity-scroll/cover.gif"
+  style={{ maxWidth: "360px" }}
+  alt="커버 이미지"
+/>
+
+토이 프로젝트로 데이터 목록을 100만 개 정도 렌더링하는 간단한 사이트를 만들고 있었습니다. 처음에는 `Pagination UI`로 구현하고 있었는데, 심미적으로는 `Infinite Scroll`이 더 어울릴 것 같아 개발 방향을 바꿨습니다. 그런데 Infinite Scroll을 적용하고 나니 문제점이 보였습니다.
+
+![오류 이미지](/images/posts/infinity-scroll/image1.png)
+
+스크롤을 한참 내리니 쌓인 DOM 때문에 브라우저가 버거워하는 상황이었습니다. 따라서 최적화 방법을 찾아야만 했습니다.
+
+## 최적화 방안
+
+가장 먼저 떠오른 방법은 여분의 DOM을 미리 만들어 두고, 데이터를 불러올 때마다 DOM을 새로 생성하는 대신 기존 DOM을 재사용하는 방식이었습니다. 괜찮은 접근이라고 판단해 바로 적용해보기로 했습니다.
+
+이를 구현하려면 DOM을 추가하지 않고 기존 DOM을 재사용하는 로직이 필요했습니다. 또한 스크롤을 내리거나 올릴 때 어색하지 않도록, 리스트를 감싸는 DOM의 전체 높이를 변경하는 로직과 리스트 위치를 보정하는 로직도 함께 필요했습니다.
+
+## 구현 방법
+
+```vue
+<template>
+  <div class="root" ref="rootRef">
+    <div class="container" ref="scrollContainerRef">
+      <div ref="loadMoreTriggerTopRef" class="load-more-trigger-top"></div>
+      <div v-for="(item, index) in visibleItems" :key="index" class="item">
+        {{
+          item.id +
+          ". " +
+          item.first_name +
+          " " +
+          item.last_name +
+          " - " +
+          item.email
+        }}
+      </div>
+      <div ref="loadMoreTriggerBottomRef" class="load-more-trigger"></div>
+      <div v-if="loading" class="loading">Loading...</div>
+    </div>
+  </div>
+</template>
+```
+
+템플릿 구조는 다음과 같습니다.
+
+1. .root: 스크롤 영역 전체를 감싸는 컨테이너입니다.
+2. .scrollContainer: 데이터가 로드되는 실제 컨테이너입니다.
+3. .loadMoreTriggerTop, .loadMoreTriggerBottom: 각각 스크롤의 상단/하단에 위치하며, 해당 DOM이 화면에 들어오면 Observer가 트리거되어 이전/다음 데이터를 로드합니다.
+4. .loading: 로딩 중임을 사용자에게 알리는 UI 요소입니다.
+
+```javascript
+import { ref, onMounted, onUnmounted } from "vue";
+import { DataType } from "@/types";
+
+const totalItems =
+  ref <
+  DataType >
+  {
+    first: 1,
+    prev: null,
+    next: null,
+    last: 0,
+    pages: 0,
+    items: 0,
+    data: [],
+  };
+const visibleItems = ref < DataType["data"] > [];
+
+const loadMoreTriggerTopRef = (ref < HTMLElement) | (null > null);
+const loadMoreTriggerBottomRef = (ref < HTMLElement) | (null > null);
+const rootRef = (ref < HTMLElement) | (null > null);
+const scrollContainerRef = (ref < HTMLElement) | (null > null);
+
+const loading = ref(false);
+const page = ref(0); // mount 되면서 1로 변경됨.
+const pageSize = 20;
+const prevDireciton = (ref < "up") | ("down" > "down"); // 이전에 어느 방향에서 데이터를 불러왔는지 저장한다.
+const bufferSize = pageSize * 3; // 화면에 표시할 총 아이템의 갯수. 화면에 보이는 것과 화면 위와 아래에 표시할 것을 고려하여 버퍼 크기를 크기의 3배로 설정한다.
+```
+
+한 번에 20개씩 데이터를 불러오고, 재사용할 DOM의 개수(`bufferSize`)는 총 60개로 설정했습니다.
+
+```javascript
+// 호출된 observer에 따른 분기 처리
+const onIntersect = (entries, observer) => {
+  if (entries[0].isIntersecting) {
+    if (observer === observerBottom) {
+      loadItems("down");
+    } else {
+      loadItems("up");
+    }
+  }
+};
+
+// .loadMoreTriggerTop이 화면에 들어왔을 때 (스크롤을 위로 올렸을 때)
+const observerTop = new IntersectionObserver((entries) => {
+  if (page.value > 1) onIntersect(entries, observerTop);
+});
+
+// .loadMoreTriggerBottom이 화면에 들어왔을 때 (스크롤을 아래로 내렸을 때)
+const observerBottom = new IntersectionObserver((entries) => {
+  if (page.value < totalItems.value.last) onIntersect(entries, observerBottom);
+});
+
+// mount하면 observer를 등록하고, 데이터를 로드한다.
+onMounted(async () => {
+  if (loadMoreTriggerTop.value) {
+    observerTop.observe(loadMoreTriggerTop.value);
+  }
+  if (loadMoreTriggerBottom.value) {
+    observerBottom.observe(loadMoreTriggerBottom.value);
+  }
+  loadItems("down");
+});
+
+// unmount하면 지정된 observer를 해제하여 불필요한 메모리 낭비를 막는다.
+onUnmounted(() => {
+  if (loadMoreTriggerTop.value) {
+    observerTop.unobserve(loadMoreTriggerTop.value);
+  }
+  if (loadMoreTriggerBottom.value) {
+    observerBottom.unobserve(loadMoreTriggerBottom.value);
+  }
+});
+```
+
+observer를 등록한 뒤 스크롤을 위/아래로 움직였을 때 분기 처리를 해줍니다. `loadMoreTriggerTop`, `loadMoreTriggerBottom`이 화면에 노출되면 Observer에 의해 `loadItems()` 함수가 호출됩니다.
+
+```javascript
+// 스크롤 처리 함수
+const loadItems = async (direction: "up" | "down") => {
+  if (loading.value) return;
+  loading.value = true;
+
+  try {
+    // 이전의 스크롤 방향과 현재 방향을 비교하여 올바른 page 번호를 계산함
+    const newPage =
+      direction === "down"
+        ? prevDireciton.value === "down"
+          ? page.value + 1
+          : page.value + 3
+        : prevDireciton.value === "down"
+        ? page.value - 3
+        : page.value - 1;
+
+    const response = await fetch(
+      `http://localhost:3001/items?_page=${newPage}&_per_page=${pageSize}`
+    );
+    const data: DataType = await response.json();
+
+    switch (direction) {
+      case "down":
+        // 화면을 내리면 스크롤 높이를 추가하는 로직
+        if (page.value >= 1) {
+          const item = document.getElementsByClassName("item")[0];
+          const rootHeight =
+            (page.value + 1) * pageSize * item.getClientRects()[0].height;
+          rootRef.value!.style.height = rootHeight + "px";
+        }
+
+        // 현재 아이템들과 bufferSize가 일치하는지 체크하여 데이터를 삽입할지 대체할지 분기 처리함.
+        if (visibleItems.value.length < bufferSize) {
+          visibleItems.value.push(...data.data);
+        } else {
+          // 리스트 위치 조정
+          const item = document.getElementsByClassName("item")[0];
+          scrollContainerRef.value!.style.top = "";
+          scrollContainerRef.value!.style.bottom =
+            (prevDireciton.value === "down" ? page.value - 2 : page.value) *
+              -pageSize *
+              item.getClientRects()[0].height +
+            "px";
+
+          // 새 데이터를 추가하고 가장 오래된 데이터를 제거
+          visibleItems.value = [
+            ...visibleItems.value.slice(pageSize),
+            ...data.data,
+          ];
+        }
+        break;
+      case "up":
+        if (visibleItems.value.length < bufferSize) {
+          visibleItems.value.unshift(...data.data);
+        } else {
+          const item = document.getElementsByClassName("item")[0];
+
+          // 리스트 위치 조정
+          scrollContainerRef.value!.style.bottom =
+            Number(scrollContainerRef.value!.style.bottom.replace("px", "")) +
+            pageSize * item.getClientRects()[0].height +
+            "px";
+
+          // 새 데이터를 추가하고 가장 최근의 데이터를 제거
+          visibleItems.value = [
+            ...data.data,
+            ...visibleItems.value.slice(0, bufferSize - pageSize),
+          ];
+        }
+        break;
+    }
+
+    page.value = newPage;
+    totalItems.value = data;
+    prevDireciton.value = direction;	// 현재 스크롤 위치를 저장하여 다음 로드때 사용함
+  } catch (error) {
+    console.error("Failed to load items:", error);
+  } finally {
+    loading.value = false;
+  }
+};
+```
+
+`loadItems()` 함수는 지정된 방향(up 또는 down)에 따라 데이터를 로드하고, 서버 응답을 받아 `visibleItems` 배열을 갱신하는 함수입니다. 로직을 풀어서 설명하면 다음과 같습니다.
+
+#### 1. 다음 page 번호 계산
+
+이전 스크롤 방향과 현재 스크롤 방향을 비교하여 다음에 불러올 page 번호를 계산합니다. `bufferSize`가 `pageSize`의 3배이므로, 스크롤 방향에 따라 3을 더하거나 빼거나, 혹은 1만 조정해야 하는 경우가 생깁니다.
+
+#### 2. 화면 높이 조정
+
+스크롤이 마지막 page 번호에 도달한 것이 아니라면, 계속 아래로 스크롤할 수 있어야 하므로 `.root` 컨테이너의 높이를 동적으로 늘려야 합니다. 사용자가 화면을 아래로 스크롤할 때 `page.value >= 1` 조건이 만족되면, 렌더링되는 `.item`의 높이를 계산해 스크롤 가능 영역의 높이(`rootHeight`)를 설정합니다. `rootHeight`는 현재 page 번호에 `pageSize`와 `.item` 높이를 곱해 계산합니다.
+
+#### 3. DOM 처리
+
+`visibleItems` 배열의 길이가 `bufferSize`보다 작은 경우, 아직 스크롤 가능한 영역이 충분히 확보되지 않았다는 뜻이므로 새로운 데이터를 배열에 추가합니다.
+
+반대로 이미 `bufferSize`만큼 채워져 있다면, 새 데이터를 추가하는 대신 오래된 데이터를 제거하여 DOM 개수를 유지합니다. 또한 사용자 입장에서 스크롤이 자연스럽게 보이도록 `scrollContainerRef`의 `bottom` 값을 조정해 리스트 위치를 보정합니다.
+
+#### 4. page 정보 갱신
+
+`page`, `totalItems`, 이전 스크롤 방향 값을 갱신하여 다음 데이터 로드 시 사용합니다.
+
+## 실행 결과
+
+![결과 이미지](/images/posts/infinity-scroll/image2.gif)
+
+스크롤을 해보니 자연스럽게 동작하는 것을 확인할 수 있었습니다. 현재는 모든 item의 높이가 같지만, 추후에는 imgur처럼 각 item의 높이가 다른 케이스도 대응할 수 있도록 보완할 예정입니다.
+
+## 구현 코드
+
+[gitHub 저장소 바로가기](https://github.com/MochaChoco/infinite-scroll)

@@ -1,0 +1,348 @@
+---
+title: "Nuxt2에서 Pinia 사용하기"
+description: "Nuxt2 프로젝트에서 Vuex를 Pinia로 마이그레이션하며 적용 방법과 코드 구조 개선 포인트를 정리합니다."
+date: "2024-06-01"
+tags: ["vue", "nuxt2", "pinia", "vuex"]
+slug: "nuxt2-pinia"
+coverImage: "/images/posts/nuxt2-pinia/cover.jpg"
+---
+
+![커버 이미지](/images/posts/nuxt2-pinia/cover.jpg)
+
+안녕하세요. 이번 포스트에서는 Vue에서 상태 관리 라이브러리로 많이 사용하는 Vuex와 Pinia에 대해 얘기해볼까 합니다.
+
+저희 회사에서 운영 중인 플랫폼 사이트는 현재 Nuxt2로 구축되어 있습니다만, 유지보수를 더 효율적으로 진행하기 위해 Nuxt3로의 마이그레이션을 결정했습니다. 이 사이트는 데이터와 관련된 대부분의 로직을 Vuex로 관리하고 있습니다. `Nuxt2`는 상태 관리 라이브러리로 `Vuex`를 기본 지원하지만, `Nuxt3`는 Vuex 대신 `Pinia`를 기본 지원합니다. 따라서 다른 마이그레이션 작업에 앞서, 상태 관리 라이브러리부터 먼저 마이그레이션해야 하는 상황이었습니다.
+
+## 상태 관리 라이브러리란?
+
+상태 관리 라이브러리는 여러 컴포넌트의 상태를 중앙에서 통제할 수 있는 저장소라고 볼 수 있습니다. 이를 사용하면 애플리케이션 내 다양한 컴포넌트 간에 상태를 공유하고, 변화를 예측 가능한 방식으로 관리할 수 있다는 장점이 있습니다. 컴포넌트 구조가 복잡해질수록 상위 컴포넌트에서 하위 컴포넌트로 props를 전달하는 과정이 점점 복잡해지고 관리가 어려워지기 마련인데요. 바로 이런 상황에서 상태 관리 라이브러리가 큰 역할을 합니다.
+
+Vuex와 Pinia 같은 라이브러리는 state, actions, getters 등의 개념을 활용해 애플리케이션의 상태를 체계적으로 관리할 수 있도록 도와줍니다.
+
+## 상태 관리 라이브러리 비교
+
+### 1. Vuex
+
+Vuex는 복잡한 애플리케이션의 컴포넌트 상태를 중앙에서 효율적으로 관리합니다. 상태 변경을 mutations와 actions로 관리함으로써, 상태 변경 과정을 더 명확하고 예측 가능하게 만든다는 특징이 있습니다.
+
+1. state: 애플리케이션의 중앙 저장소 역할을 하며, 여러 컴포넌트 간에 공유되는 데이터입니다.
+2. mutations: 상태를 동기적으로 변경하는 메서드입니다.
+3. actions: 비동기 작업을 처리하거나 여러 뮤테이션을 연속적으로 실행할 때 사용합니다.
+4. getters: 저장소의 상태를 기반으로 계산된 값을 반환하는 메서드입니다.
+
+Nuxt2는 기본적으로 Vuex를 지원하므로 `/store` 폴더를 만들고 각 store를 파일로 구성해두면, 별도로 createStore()로 store를 생성할 필요가 없습니다. Nuxt는 해당 폴더 내의 모든 .js 파일을 자동으로 Vuex 모듈로 처리하고, 이를 하나의 Vuex 스토어로 조합합니다.
+
+아래의 Vue 코드는 **사용자로부터 유저 ID를 입력받아 API로 유저 정보를 호출하는 예시**입니다. 사용자가 입력한 유저 ID가 짝수라면 유저의 상세 정보도 함께 호출하도록 구성했습니다.
+
+```javascript
+// Vuex 스토어 설정
+// store/user.js
+import axios from "axios";
+
+const BASE_URL = "http://localhost:3000";
+
+export const state = () => ({
+  userData: null, // 사용자 정보
+  userId: 0, // 사용자 ID
+});
+
+export const mutations = {
+  setUserData(state, userData) {
+    state.userData = userData;
+  },
+  setUserId(state, userId) {
+    state.userId = userId;
+  },
+};
+
+export const actions = {
+  async fetchUserDataById({ commit, state }) {
+    if (state.userId) {
+      try {
+        const response = await axios.get(
+          `${BASE_URL}/api/users/${state.userId}`,
+        );
+        // 유저 정보 저장 및 상세 유저 정보 가져오기 로직 실행
+        commit("setUserData", response.data);
+
+        if (state.userData && state.userData.id % 2 === 0) {
+          await this.dispatch("user/fetchUserDetail");
+        }
+
+        return state.userData;
+      } catch (error) {
+        console.error("Failed to fetch user data:", error);
+      }
+    } else {
+      console.error("User ID is not provided.");
+    }
+  },
+  async fetchUserDetail({ commit, state }) {
+    // 유저 정보의 id가 짝수라면 추가적인 유저 정보를 가져옴
+    console.log("User data fetched:", state.userData);
+    try {
+      const response = await axios.get(
+        `${BASE_URL}/api/users/detail?userId=${state.userData.id}`,
+      );
+      commit("setUserData", {
+        ...state.userData,
+        ...response.data,
+      });
+
+      console.log("Additional user data fetched:", response.data);
+    } catch (error) {
+      console.error("Failed to fetch additional user data:", error);
+    }
+  },
+};
+```
+
+```vue
+<!-- pages/user-vuex.vue -->
+<template>
+  <div>
+    <input
+      :value="userId"
+      @input="setUserId($event.target.value)"
+      placeholder="Enter user ID"
+      type="number"
+    />
+    <button @click="fetchUserDataById">Fetch User Data</button>
+    <div v-if="userData">
+      <p>userName : {{ userData.name }}</p>
+      <p>userId: {{ userData.id }}</p>
+      <template v-if="userData.id % 2 === 0">
+        <p>email : {{ userData.email }}</p>
+        <p>gender {{ userData.gender }}</p>
+      </template>
+    </div>
+  </div>
+</template>
+
+<script>
+import { mapState, mapMutations, mapActions } from "vuex";
+
+export default {
+  computed: {
+    ...mapState("user", ["userId", "userData"]), // store/user.js에 있는 store의 userId
+  },
+  methods: {
+    // store/user.js에 있는 store의 setUserId Mutation을 등록
+    ...mapMutations("user", ["setUserId"]),
+    // store/user.js에 있는 store의 fetchUserDataById Action을 등록
+    ...mapActions("user", ["fetchUserDataById"]),
+  },
+};
+</script>
+```
+
+위 컴포넌트는 `store/user.js`에 정의된 store의 state, mutations, actions을 Vuex가 제공하는 `mapState`, `mapMutations`, `mapActions`로 각각 매핑하고 있습니다.
+
+1. Computed Property: userId 상태를 컴포넌트의 계산된 속성으로 매핑합니다.
+2. Methods: `setUserId` 뮤테이션을 메서드로 매핑해, 입력 필드에서 발생하는 변화를 Vuex 상태에 반영합니다.
+3. Actions: `fetchUserDataById` 액션을 메서드로 매핑해, 버튼 클릭 시 호출되도록 구성했습니다.
+
+위 구조는 user 관련 데이터 fetching, 데이터 자체(state), 그리고 파라미터(params)까지 Vuex를 통해 관리하는 방식입니다. 이 구조에서는 다른 컴포넌트들이 Vuex를 구독하기만 하면 user 데이터에 접근하거나 수정하기가 쉬워진다는 장점이 있습니다.
+
+다만 한 컴포넌트나 라이브러리에 모든 로직을 집중시키면, 기능을 추가하거나 수정할 때 side-effect가 발생할 가능성이 커져 유지보수가 어려워질 수 있습니다.
+
+또한 Vuex가 Vue의 반응성 시스템으로 상태 변화를 감지한다는 점을 고려하면, store 내 로직이 과도하게 많거나 상태가 자주 업데이트되는 경우 애플리케이션 전체 성능 저하로 이어질 수 있다는 점도 주목할 필요가 있습니다.
+
+물론 모든 로직을 store에 집중할 필요는 없습니다. 다만 현재 저희 팀에서 사용하고 있는 코드 구조는 대체로 이런 방식을 따르고 있고, 앞서 언급한 문제점도 함께 안고 있었습니다. 그래서 Pinia로 마이그레이션하는 과정에서 로직을 적절히 분리하는 작업이 꼭 필요했습니다.
+
+### 2. Pinia
+
+Pinia는 Vuex의 대안으로 개발되었고, 더 단순하고 유연한 사용법을 제공합니다. Vuex에서는 여러 모듈을 사용할 때 상호작용을 관리하기 위해 `namespace` 기반 접근 방식을 사용하는 반면, Pinia는 `function` 기반 접근 방식을 사용해 상태 관리를 간소화할 수 있습니다. 아래 코드는 moduleA에서 moduleB의 값을 업데이트하는 방법을 비교한 예시입니다.
+
+```javascript
+// Vuex
+// store/moduleA.js
+export default {
+  namespaced: true,
+  state: {
+    name: 'Module A'
+  },
+  mutations: {
+    updateName(state, newName) {
+      state.name = newName;
+    }
+  },
+  actions: {
+    updateOtherModuleName({ commit }, newName) {
+      // namespace 사용
+      commit('b/updateName', newName, { root: true });
+    }
+  }
+}
+
+// store/moduleB.js
+export default {
+  namespaced: true,
+  state: {
+    name: 'Module B'
+  },
+  mutations: {
+    updateName(state, newName) {
+      state.name = newName;
+    }
+  }
+}
+```
+
+Vuex에서는 moduleB의 name을 변경하기 위해 `commit()`에 **b/updateName**과 같은 namespace를 사용하고 있습니다. `/store` 폴더 구조가 복잡해지면 namespace도 길어질 수밖에 없습니다. 또한 state 변경을 위해 mutations, actions를 직접 호출하지 않고 `commit` 및 `dispatch`를 거쳐야 하는데, 이런 점도 가독성을 떨어뜨릴 수 있습니다.
+
+```javascript
+// Pinia
+// store/moduleA.js
+import { defineStore } from "pinia";
+import { useModuleBStore } from "./moduleB";
+
+export const useModuleAStore = defineStore("moduleA", {
+  state: () => ({
+    name: "Module A",
+  }),
+  actions: {
+    updateOtherModuleName(newName) {
+      const moduleB = useModuleBStore();
+      moduleB.updateName(newName);
+    },
+  },
+});
+
+// store/moduleB.js
+import { defineStore } from "pinia";
+
+export const useModuleBStore = defineStore("moduleB", {
+  state: () => ({
+    name: "Module B",
+  }),
+  actions: {
+    updateName(newName) {
+      this.name = newName;
+    },
+  },
+});
+```
+
+반면 Pinia는 `useModuleBStore`를 import한 뒤 해당 함수를 직접 호출하므로, `/store` 구조가 복잡해져도 상대적으로 부담이 적습니다.
+
+## Vuex에서 Pinia로의 변환
+
+아래는 앞서 소개한 “유저 ID 입력 → API 호출” 예시를 Vuex에서 Pinia로 변환하면서, 로직을 분리한 결과입니다.
+
+```javascript
+// /api/userFetching.js
+import axios from "axios";
+
+const BASE_URL = "http://localhost:3000";
+
+export const fetchUserById = (userId) => {
+  return axios.get(`${BASE_URL}/api/users/${userId}`);
+};
+
+export const fetchUserDetailById = (userId) => {
+  return axios.get(`${BASE_URL}/api/users/detail?userId=${userId}`);
+};
+
+// store/userStore.js
+import { defineStore } from "pinia";
+import { fetchUserById, fetchUserDetailById } from "@/api/userFetching";
+
+export const useUserStore = defineStore("userStore", {
+  state: () => ({
+    userData: null,
+  }),
+  actions: {
+    async loadUserData(userId) {
+      if (userId) {
+        try {
+          const response = await fetchUserById(userId);
+          this.userData = response.data;
+
+          console.log("User data fetched:", response.data);
+
+          // 유저 정보의 id가 짝수라면 추가적인 유저 정보를 가져옴
+          if (userId % 2 === 0) {
+            await this.loadUserDetail(userId);
+          }
+
+          return this.userData;
+        } catch (error) {
+          console.error("Failed to fetch user data:", error);
+        }
+      } else {
+        console.error("User ID is not provided.");
+      }
+    },
+    async loadUserDetail(userId) {
+      try {
+        const response = await fetchUserDetailById(userId);
+        this.userData = {
+          ...this.userData,
+          ...response.data,
+        };
+
+        console.log("Additional user data fetched:", response.data);
+      } catch (error) {
+        console.error("Failed to fetch additional user data:", error);
+      }
+    },
+  },
+});
+```
+
+```vue
+<!-- pages/user-pinia.vue -->
+<template>
+  <div>
+    <input v-model="userId" placeholder="Enter user ID" type="number" />
+    <button @click="loadUserData">Fetch User Data</button>
+    <div v-if="userData">
+      <p>userName : {{ userData.name }}</p>
+      <p>userId: {{ userData.id }}</p>
+      <template v-if="userData.id % 2 === 0">
+        <p>email : {{ userData.email }}</p>
+        <p>gender {{ userData.gender }}</p>
+      </template>
+    </div>
+  </div>
+</template>
+
+<script>
+import { useUserStore } from "@/store/userStore";
+
+export default {
+  data() {
+    return {
+      userData: null,
+      userId: 0,
+    };
+  },
+  methods: {
+    async loadUserData() {
+      const userStore = useUserStore();
+      this.userData = await userStore.loadUserData(this.userId);
+    },
+  },
+};
+</script>
+```
+
+Pinia로 마이그레이션하면서 파라미터는 로컬 상태로 두고, 데이터 fetching은 다른 컴포넌트에서도 재사용할 수 있도록 별도 함수로 분리했습니다. 또한 store에는 fetching 결과로 받아온 데이터만 저장하도록 했는데요. 그 이유는 다음과 같습니다.
+
+1. 로컬 상태 관리: userId는 컴포넌트 입력과 밀접하게 연결되어 있으므로 로컬 상태로 관리하면 컴포넌트의 독립성을 유지하면서 상태 관리를 단순화할 수 있습니다.
+2. 책임의 명확화: 스토어는 API를 통해 데이터를 가져오고 상태를 관리하는 책임에 집중합니다. 이는 코드 가독성과 유지보수성을 향상시킵니다.
+3. 스토어의 유연성: 스토어가 특정 컴포넌트의 입력 상태에 의존하지 않기 때문에, 동일한 스토어를 다양한 컴포넌트에서 유연하게 사용할 수 있습니다.
+
+이 구성을 통해 스토어와 컴포넌트 각각의 책임이 더 명확해지고, 애플리케이션의 전체적인 아키텍처도 개선되었습니다.
+
+## 구현 코드
+
+[gitHub 저장소 바로가기](https://github.com/MochaChoco/vuex-to-pinia)
+
+## 참고 자료
+
+- [Vuex 공식문서](https://vuex.vuejs.org/guide/)
+- [Pinia 공식문서](https://pinia.vuejs.org/core-concepts/)
+- [Exploring Vue.js State Management: Pinia vs. Vuex](https://www.linkedin.com/pulse/exploring-vuejs-state-management-pinia-vs-vuex-kanaan-alhussein-ysqof/)
+- [Pinia vs Vuex - Why Pinia wins](https://vuejsdevelopers.com/2023/04/11/pinia-vs-vuex---why-pinia-wins/)
