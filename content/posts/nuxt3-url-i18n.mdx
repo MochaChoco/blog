@@ -1,0 +1,179 @@
+---
+title: "Nuxt 3 프로젝트에서 URL을 통한 다국어 설정하기"
+description: "nuxtjs/i18n 대신 vue-i18n을 적용하고, 라우터 옵션을 확장해 `/en` 같은 URL prefix로 로케일을 전환하는 방법과 주의사항을 정리합니다."
+date: "2023-10-18"
+tags: ["nuxt3", "vue", "i18n", "router"]
+slug: "nuxt3-url-i18n"
+coverImage: "/images/posts/nuxt3-url-i18n/cover.jpg"
+---
+
+![커버 이미지](/images/posts/nuxt3-url-i18n/cover.jpg)
+
+## 서론
+
+이전 포스트 [Nuxt 3 프로젝트에서 서브도메인 처리하기](https://velog.io/@swj9077/Nuxt-3-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8%EC%97%90%EC%84%9C-%EC%84%9C%EB%B8%8C%EB%8F%84%EB%A9%94%EC%9D%B8-%EC%B2%98%EB%A6%AC%ED%95%98%EA%B8%B0)에서 서브도메인을 처리하는 방법을 정리했습니다. 이번 포스트에서는 해당 코드 구조를 기반으로 URL로 다국어 처리를 하는 방법을 정리해보겠습니다.
+
+다국어 프레임워크 중에서는 `i18n` 계열 라이브러리가 널리 사용됩니다. i18n은 React, Vue, Angular뿐만 아니라 Android, iOS, PHP 등 다양한 생태계를 지원합니다. 다만 여러 프레임워크를 동시에 지원하다 보니, 특정 프레임워크의 최신 변화에 대한 업데이트가 다소 느릴 때가 있습니다.
+
+예를 들어 Nuxt의 i18n은 최신 버전에서 Nuxt 3를 지원하지만, 당시 정식 릴리즈된 버전은 Nuxt 2만 지원하는 상태였습니다. 또한 업데이트 주기도 오래되어 그대로 적용하기에는 리스크가 있다고 판단했습니다.
+
+![라이브러리](/images/posts/nuxt3-url-i18n/image1.png)
+
+그래서 이번 프로젝트에서는 비교적 업데이트가 빠른 `vue-i18n`을 이용해 다국어를 구성하기로 결정했습니다. 실제로 `nuxtjs/i18n`도 `vue-i18n`을 기반으로 만들어지므로, 적용 자체는 큰 문제가 없었습니다.
+
+## 설정 방법
+
+Nuxt 3는 파일 시스템 라우팅을 지원합니다. 라우팅뿐만 아니라 Vue 플러그인도 별도 설정 없이 비교적 간단히 등록할 수 있습니다. 라우팅은 `pages` 폴더를 기반으로 자동 생성되고, 플러그인은 `plugins` 폴더의 파일들이 자동으로 등록됩니다.
+
+프로젝트 루트에 `plugins` 폴더를 만들고, 그 안에 `i18n.ts` 파일을 아래 코드처럼 작성합니다.
+
+```javascript
+//  plugins/i18n.ts
+import { createI18n } from "vue-i18n";
+
+export default defineNuxtPlugin((nuxtApp) => {
+  const i18n = createI18n({
+    locale: "ko",
+    legacy: false, // Composition API에서 사용하려면 false로 설정합니다.
+    messages: {
+      ko: {
+        index: "메인 페이지",
+        detail: "상세 페이지",
+        go: "상세 페이지로 이동",
+        back: "뒤로 가기",
+        error: "에러",
+      },
+      en: {
+        index: "main page",
+        detail: "detail page",
+        go: "go to detail page",
+        back: "go back",
+        error: "error",
+      },
+    },
+  });
+
+  nuxtApp.vueApp.use(i18n);
+  nuxtApp.provide("i18n", i18n); // 다른 플러그인에서 사용하기 위함
+});
+```
+
+한글일 경우 `locale` 값은 `ko`, 영문일 경우 `en`입니다. 이번 프로젝트에서는 기본 `locale`을 `ko`로 지정했습니다. `legacy`는 Nuxt 3의 Composition API에서 사용하기 위한 옵션이며, 기존처럼 Options API를 사용하신다면 `true`로 설정하셔도 무방합니다. `messages`에는 실제 번역 문자열을 구성합니다. 이번 예시에서는 한글/영어를 지원하므로 `ko`, `en`을 준비합니다.
+
+```javascript
+// app/router.options.ts
+if (routesDirectory) {
+  newRoutes = _routes
+    .filter((route: any) => {
+    // routesDirectory가 pc면 pc 경로만, mobile이면 mobile 경로만 가져옴
+    return checkIsUnderDirectory(route.path, routesDirectory);
+  })
+    .map((route: any) => {
+    // 접근가능한 route 경로 재설정
+    return {
+      ...route,
+      path:
+      "/:locale(en|)?" +
+      route.path.substr(routesDirectory.length + 1) || "/",
+      name: route.name || "index",
+    };
+  });
+
+  // console.log("_routes", _routes);
+  // console.log("newRoutes", newRoutes);
+  return newRoutes;
+}
+
+```
+
+대부분의 사이트는 default locale일 경우 URL에서 언어 값이 생략되는 경우가 많습니다. 예를 들어 `ko`일 때는 `/detail`, `en`일 때는 `/en/detail`처럼 동작해야 합니다. 이를 위해 라우터 옵션을 수정합니다. 기존에 생성한 `app/router.options.ts` 파일에서 route를 반환하는 부분의 `path`에 `/:locale(en|)?`를 추가합니다. 이는 prefix를 `en`으로 받거나(혹은 생략하거나)만 허용하겠다는 의미이며, 그 외 값이 들어오면 Nuxt 라우터에서 404를 반환합니다.
+
+또한 URL의 `locale` 값에 따라 `vue-i18n`의 `locale`도 변경해주는 처리가 필요합니다. `plugins/route.ts` 파일을 만들고 아래처럼 작성합니다.
+
+```javascript
+// plugins/route.ts
+import { useRouter } from "vue-router";
+
+export default defineNuxtPlugin((nuxtApp) => {
+  const router = useRouter();
+  router.beforeEach(async (to, from) => {
+    // URL에서 locale을 읽어 설정합니다.
+    let locale = to.params.locale;
+    if (!locale) {
+      locale = "ko";
+    }
+
+    nuxtApp.$i18n.global.locale.value = locale;
+  });
+});
+```
+
+위 코드는 router의 navigation이 트리거될 때 동작합니다. 즉, 주소가 변경되기 전에 실행되는 코드입니다. 주소창에서 입력받은 URL의 `locale`을 확인한 뒤, 앞서 등록한 i18n 인스턴스에 값을 반영해야 locale에 따른 언어가 정상적으로 출력됩니다.
+
+```vue
+//pages/pc/index.vue
+<script setup lang="ts">
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
+</script>
+
+<template>
+  <div>
+    <p>{{ t("title") }}</p>
+  </div>
+</template>
+```
+
+## 결과 확인
+
+다국어를 출력할 페이지 파일을 만든 뒤, 주소창에 아래처럼 입력해보면 다음과 같은 결과를 확인할 수 있습니다.
+
+1. http://localhost:3000/ --> 메인 페이지
+2. http://localhost:3000/en --> main page
+3. http://localhost:3000/fr --> 404 에러
+
+![결과1](/images/posts/nuxt3-url-i18n/image2.png)
+
+도메인 뒤에 `locale` 값이 붙으면 해당 locale에 따라 정상적으로 출력되는 것을 확인할 수 있습니다.
+
+### ※ 유의사항
+
+다만 이 방법을 그대로 적용하면, 주소창에 URL을 직접 입력했을 때는 locale 변경이 잘 되지만, `NuxtLink` 컴포넌트나 `router.push()`로 페이지 이동을 할 때 locale 값이 기대대로 반영되지 않을 수 있습니다.
+
+```html
+<NuxtLink
+  :to="{
+      path: '/detail',
+      params: { locale: 'en' },
+    }"
+  >detail 페이지로 이동</NuxtLink
+>
+```
+
+예를 들어 위 버튼을 누르면 locale이 `en`인 상세 페이지로 이동할 것 같지만, 실제로는 locale이 `ko`인 상세 페이지로 이동될 수 있습니다. 동시에 콘솔에서도 아래와 같은 경고가 출력됩니다.
+
+![결과2](/images/posts/nuxt3-url-i18n/image3.png)
+
+Vue Router 공식 문서를 확인해보니, 이 경우 `path` 대신 `name` 기반 라우팅을 사용하라는 안내였습니다.
+
+```html
+<NuxtLink
+  :to="{
+      name: 'pc-detail',
+      params: { locale: 'en' },
+    }"
+  >detail 페이지로 이동</NuxtLink
+>
+```
+
+그래서 코드를 다음처럼 수정하니 locale이 유지되면서 정상적으로 경로가 변경되었습니다.
+
+## 샘플 코드
+
+[git 저장소 이동 (https://github.com/MochaChoco/locale-test)](https://github.com/MochaChoco/locale-test)
+
+## 참고자료
+
+- [Vue I18n 공식 문서](https://kazupon.github.io/vue-i18n/introduction.html#sponsors)
+- [Named Routes | Vue Router](https://router.vuejs.org/guide/essentials/named-routes.html)

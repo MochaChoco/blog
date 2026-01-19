@@ -1,0 +1,28 @@
+---
+title: "VS Code에서 Pylint import error(E0401) 해결하기"
+description: "VS Code에서 모듈이 설치되어 있는데도 `Unable to import` 오류가 발생할 때, Python Interpreter 설정을 점검하여 해결한 과정을 정리합니다."
+date: "2024-04-25"
+tags: ["python", "vscode", "pylint"]
+slug: "python-import"
+coverImage: "/images/posts/python-import/cover.png"
+---
+
+![커버 이미지](/images/posts/python-import/cover.png)
+
+Python으로 작성된 소스를 Git으로 받았는데, 실제로 모듈이 설치되어 있음에도 VS Code에서 특정 모듈이 설치되지 않았다는 오류가 출력되면서 프로그램이 실행조차 되지 않았습니다.
+
+사진에 나온 `E0401: Unable to import` 오류를 검색해보니, Pylint가 모듈 import에 실패했을 때 출력되는 메시지였습니다. Pylint는 Python 코드의 오류를 확인하거나 이상한 부분을 찾는 도구를 의미합니다.
+
+구글링을 해보니 대다수의 글에서 원인을 Python Interpreter 설정으로 지목하고 있었습니다. 그래서 `Ctrl + Shift + P > Select Interpreter`에서 확인해 보았는데, 제 환경에서는 Python 버전이 두 개 설치되어 있었고, Global 버전이 아닌 Recommended 버전으로 interpreter가 설정되어 있었습니다.
+
+모듈은 Global 버전에 설치되어 있는데 Recommended 버전으로 실행하니, 해당 모듈을 찾지 못했던 것이었습니다.
+
+![결과](/images/posts/python-import/image.png)
+
+이를 Global 버전으로 변경하니 문제없이 실행되었습니다.
+
+## 참고 자료
+
+- [Pylint - Documentation](https://pylint.readthedocs.io/en/latest/user_guide/messages/error/import-error.html)
+- [Stack Overflow - Visual Studio Code pylint: Unable to import 'protorpc'](https://stackoverflow.com/questions/43574995/visual-studio-code-pylint-unable-to-import-protorpc)
+- [VSCode - Python environments in VS Code](https://code.visualstudio.com/docs/python/environments)
