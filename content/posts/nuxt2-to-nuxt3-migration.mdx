@@ -1,0 +1,166 @@
+---
+title: "Nuxt2에서 Nuxt3로 마이그레이션 도전기"
+description: "Nuxt2 프로젝트를 Nuxt3로 전환하며 겪었던 주요 차이점과, 라이브러리 업데이트/디렉터리 이동/Composition API 전환 순서로 진행한 마이그레이션 접근을 정리합니다."
+date: "2023-08-16"
+tags: ["nuxt2", "nuxt3", "migration", "vue"]
+slug: "nuxt2-to-nuxt3-migration"
+coverImage: "/images/posts/nuxt2-to-nuxt3-migration/cover.webp"
+---
+
+<img
+  src="/images/posts/nuxt2-to-nuxt3-migration/cover.webp"
+  style={{ maxWidth: "420px" }}
+  alt="커버 이미지"
+/>
+
+신규 구축 프로젝트를 개발 진행 중이었는데, 처음에는 `Nuxt2`로 개발하다가 고객 요구 사항 수정으로 인해 `Nuxt3`로 버전을 올려야 하는 상황이 발생했습니다. 마감 일자는 다가오고 있었고, 이미 작업된 코드 양이 상당해 모든 것을 초기화하고 Nuxt3로 다시 만드는 것은 시간적으로 어려웠습니다. 따라서 Nuxt2에서 Nuxt3로 마이그레이션하는 방법을 선택했습니다.
+
+이번 글에서는 제가 마이그레이션을 진행한 방법을 정리해보겠습니다.
+
+## Nuxt2와 Nuxt3의 차이점?
+
+마이그레이션에 앞서 Nuxt2와 Nuxt3의 차이점을 먼저 파악할 필요가 있습니다. 버전이 올라가면서 변화가 많았지만, 여기서는 마이그레이션에 필요했던 차이점만 정리하겠습니다.
+
+### 1. 디렉토리 관련 변경 사항
+
+#### 1) Auto-import 추가
+
+Nuxt3는 Auto-import를 지원합니다. 따라서 `/pages`, `/components`, `/composables`, `/utils` 등의 폴더를 생성하고 파일을 추가하면 별도 import 없이 코드를 사용할 수 있습니다.
+
+```jsx
+// /components/intro.tsx
+<template>
+  <div class="root">
+    <h1>Welcome to Nuxt</h1>
+  </div>
+</template>
+<style></style>
+
+// app.vue
+<template>
+  <div>
+    <Intro />
+  </div>
+</template>
+
+```
+
+물론 개발자 선호도에 따라 기존의 명시적 import를 사용하거나 `nuxt.config.ts`에서 Auto-import를 비활성화할 수도 있습니다.
+
+```jsx
+// nuxt.config.ts
+export default defineNuxtConfig({
+  imports: {
+    autoImport: false,
+  },
+});
+```
+
+#### 2) 설정 파일 문법 변경
+
+Nuxt3로 넘어오면서 설정 관련 파일 작성 방식도 변경되었습니다. 기존에는 작성한 파일을 단순히 export 하는 형태였다면, Nuxt3에서는 `defineNuxtConfig`, `defineNuxtPlugin` 같은 Nuxt에서 제공하는 함수의 인자로 설정 값을 전달합니다. 대표적으로 `nuxt.config.ts`와 `/plugins` 폴더 내 플러그인 파일이 이에 해당합니다.
+
+```jsx
+// Nuxt2의 nuxt.config.js
+export default {
+  router: {
+    extendRoutes (routes) {
+      ...
+    }
+  }
+}
+
+// Nuxt3의 nuxt.config.ts
+export default defineNuxtConfig({
+  hooks: {
+    'pages:extend' (routes) {
+      ...
+    }
+  }
+})
+```
+
+#### 3) 정적 파일 폴더 변경
+
+정적 icon/image를 저장하던 `static` 폴더는 Nuxt3로 버전 업되면서 `public` 폴더로 이름이 변경되었습니다.
+
+### 2. Composition API 공식 지원
+
+Nuxt2는 기본적으로 `Options API` 형태입니다.
+Options API는 적응하기 쉽지만 코드 규모가 커질수록 관리가 어려워지고 재사용성이 떨어질 수 있습니다. 이를 보완하기 위해 `Composition API`로도 작성할 수 있지만, Nuxt2에서는 `Nuxt-bridge`를 추가 설치해야 하고 공식 지원 범위가 제한적이라는 부담이 있습니다.
+
+![이미지1](/images/posts/nuxt2-to-nuxt3-migration/image1.png)
+
+다행히 Nuxt3에서는 기본적으로 Composition API를 지원하며, 공식적으로도 이를 권장합니다. Composition API는 `ref`, `computed` 등 React의 `useState`, `useEffect`와 유사한 패턴의 API를 제공하고, 동작 방식도 비슷해 React 경험이 있다면 비교적 빠르게 적응할 수 있습니다.
+
+```jsx
+// Options API
+<script>
+export default {
+  data() {
+    return {
+      count: 0
+    }
+  },
+  methods: {
+    increment(){
+      this.count++
+    }
+  }
+}
+</script>
+
+// Composition API
+<script setup lang="ts">
+const count = ref(0);
+const increment = () => count.value++;
+</script>
+
+```
+
+### 3. TypeScript 공식 지원
+
+Nuxt2는 기본적으로 `TypeScript`를 지원하지 않으므로, TypeScript를 사용하려면 프로젝트 생성 후 추가 라이브러리 설치와 별도 설정이 필요했습니다. 반면 Nuxt3는 설치 단계에서 TypeScript 적용 여부를 선택할 수 있어, 추가 설정 없이도 비교적 손쉽게 TypeScript를 도입할 수 있습니다.
+
+## 마이그레이션 순서
+
+### 1. Nuxt3 프로젝트 생성
+
+기존 프로젝트는 Nuxt2 + JavaScript로 구성되어 있었고, Nuxt3 + TypeScript로 전환하려면 새 프로젝트를 생성한 뒤 코드를 옮기는 편이 낫겠다고 판단했습니다. 그래서 `yarn create nuxt-app <my-project>` 명령어로 Nuxt 프로젝트를 생성했습니다.
+명령어를 입력하면 아래 사진처럼 프로젝트 정보를 선택할 수 있는데, TypeScript를 사용할 예정이므로 Programming language 항목을 TypeScript로 선택했습니다.
+
+![이미지2](/images/posts/nuxt2-to-nuxt3-migration/image2.png)
+
+### 2. 기존 라이브러리 최신화
+
+기존 프로젝트의 `package.json`에서 third-party dependency만 복사해 새 프로젝트의 `package.json`에 붙여넣었습니다. 처음에는 이 방법으로 진행했지만 라이브러리 간 호환 문제로 빌드 에러가 발생했습니다. 그래서 `npm-check-updates`를 사용해 호환성이 유지되는 범위에서 버전을 최신화했습니다.
+
+> [npm-check-updates 문서 바로가기](https://www.npmjs.com/package/npm-check-updates)
+
+다행히 기존 프로젝트 생성 시점이 오래되지 않아, major 버전 업데이트만으로도 큰 문제 없이 호환성을 맞출 수 있었습니다.
+
+### 3. 디렉토리 이동 및 코드 수정
+
+그 다음으로는 기존 Nuxt2의 파일/코드를 Nuxt3에 맞게 수정하는 작업이 필요했습니다. 이 부분이 가장 어려웠고, 과정은 아래와 같았습니다.
+
+---
+
+1. 기존 프로젝트의 루트 폴더 하위의 폴더들을 복사해 새 프로젝트에 덮어쓴 뒤, `/static` 폴더 이름을 `/public`으로 변경합니다.
+2. `nuxt.config.ts`와 `/plugins` 폴더 안의 파일들을 Nuxt3 문법으로 수정한 후, `nuxi dev`로 프로젝트를 실행합니다.
+3. 실행 단계에서 발생하는 오류를 하나씩 수정합니다.
+4. 페이지 레이아웃을 담당하는 `/layouts/default.vue`와 관련 컴포넌트부터 Composition API로 전환합니다.
+5. TypeScript 적용을 위해 루트에 `/types` 폴더를 만들고 타입을 정의합니다.
+
+---
+
+## 마치며
+
+사실 마이그레이션을 이번에 처음 해봤는데, 어떤 방식으로 접근하면 좋을지 고민하던 중 “Nuxt2와 Nuxt3의 차이점을 먼저 파악하라”는 조언을 접했습니다. 그래서 두 버전의 차이점을 기준으로 마이그레이션을 진행하니, 생각보다 수월하게 작업할 수 있었습니다.
+
+## 참고 자료
+
+- [(공식 문서) Migrate to Nuxt 3](https://nuxt.com/docs/migration/overview)
+- [Options API vs Composition API](https://vueschool.io/articles/vuejs-tutorials/options-api-vs-composition-api/)
+- [Nuxt3란?](https://bysxx.tistory.com/4)
+- [Migrating from Nuxt 2 to Nuxt 3](https://debbie.codes/blog/migrating-nuxt2-nuxt3/)
+- [npm-check-updates 라이브러리](https://www.npmjs.com/package/npm-check-updates)

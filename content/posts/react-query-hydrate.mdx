@@ -1,0 +1,221 @@
+---
+title: "React Query의 Hydrate란?"
+description: "Next.js SSR 환경에서 React Query(TanStack Query)의 `Hydrate`/`dehydrate`를 활용해 서버에서 미리 받아온 데이터를 클라이언트 캐시에 주입하고, 중복 API 호출을 줄이는 방법을 정리합니다."
+date: "2023-08-03"
+tags: ["nextjs", "react", "react-query", "tanstack-query", "ssr"]
+slug: "react-query-hydrate"
+coverImage: "/images/posts/react-query-hydrate/cover.png"
+---
+
+![커버 이미지](/images/posts/react-query-hydrate/cover.png)
+
+회사에서 새로운 `Next.js` 프로젝트를 개발하면서 데이터 fetch를 더 편리하게 관리하기 위해 `React Query`를 도입했습니다.
+구현 당시 대다수 페이지를 `useQuery` 훅으로 구성했는데, 페이지가 화면에 보이기 전에 서버 사이드에서 목록 API를 호출해 데이터를 받아왔음에도 클라이언트 사이드에서 동일한 API가 한 번 더 호출되는 이슈가 있었습니다. 이번 글에서는 이를 해결한 과정을 정리해보겠습니다.
+
+## React Query란?
+
+`React Query`(현 `TanStack Query`)는 서버에서 받아온 데이터의 fetch, 동기화, 캐싱 등을 더 편리하게 관리해주는 라이브러리입니다.
+
+## Next.js 프로젝트에서의 React Query의 사용
+
+`Next.js`는 페이지 진입 요청을 받으면 서버 사이드에서 해당 페이지를 데이터와 함께 pre-rendering하고, 이를 props로 클라이언트 사이드에 전달합니다. 클라이언트는 전달받은 데이터를 기반으로 페이지를 출력합니다.
+
+예를 들어 어떤 페이지가 `서버에서 받아온 데이터를 목록 형태(페이징 포함)로 출력`해야 한다면, Next.js + React Query 조합은 보통 아래와 같은 형태로 구성하게 됩니다.
+
+1. 서버 사이드에서는 첫 번째 페이지 목록 데이터를 API로 받아온 후 클라이언트에 props로 넘겨줍니다.
+2. 클라이언트 사이드에서는 사용자의 인터랙션에 따라 두 번째 이후의 페이지 정보를 React Query의 `useQuery` 훅으로 호출합니다.
+
+하지만 `useQuery`는 `enabled` 옵션 등을 별도로 조정하지 않는 이상, 클라이언트에서 마운트 이후 적어도 한 번은 동일한 API가 호출되기 때문에 서버에서 내려받은 데이터와 같은 데이터를 다시 호출하는 문제가 발생할 수 있었습니다.
+
+## 해결방안
+
+### 1) 서버 사이드에서 API 호출 생략
+
+결론부터 말씀드리면 이 방식은 권장하기 어렵습니다.
+클라이언트에서 첫 번째 페이지 정보를 호출하게 되면, 사용자 화면에서는 목록이 “로딩 중”인 것처럼 보이기 때문에 이를 보완하려면 CSR(React, Vue 등) 프로젝트처럼 스켈레톤 UI를 추가해야 하는 경우가 생길 수 있습니다.
+
+### 2) useQuery Hook의 enabled 옵션 사용
+
+위에서 언급한 방법이다.
+`enabled` 옵션에 `false`가 되는 조건을 주어 클라이언트에서 첫 번째 페이지 데이터를 호출하지 않도록 막을 수는 있습니다. 다만 이 옵션은 쿼리 자체를 비활성화하기 때문에, 이후 필요한 시점에 다시 활성화되도록 별도 처리가 필요합니다.
+
+```jsx
+const { data: queryData } = useQuery(["getListQuery"], getListApi, {
+  enabled: form.pg !== "1",
+  refetchOnWindowFocus: false,
+  onSuccess: (response) => {
+    console.log("success", response);
+  },
+  onError: (error) => {
+    console.log("onError", error);
+  },
+  staleTime: Infinity,
+});
+```
+
+### 3) initialData 사용
+
+`useQuery`에는 `initialData` 옵션도 있는데, 서버에서 내려받은 props를 `initialData`에 넣으면 초기 호출을 방지할 수 있습니다. 하지만 훅이 깊게 중첩된 컴포넌트 안에 있다면 해당 위치까지 `props drilling`이 필요하다는 번거로움이 있습니다. 또한 다음 페이지 정보를 호출하기 위해서는 조건에 따라 `initialData`를 비활성화하는 로직을 추가해야 합니다.
+
+```jsx
+export default function InitialData(props: any) {
+  // props.data는 server side에서 받아온 데이터
+  return <Overlap1 data={props.data} />;
+}
+
+function Overlap1(props: any) {
+  return <Overlap2 data={props.data} />;
+}
+
+function Overlap2(props: any) {
+  return <Overlap3 data={props.data} />;
+}
+
+function Overlap3(props: any) {
+  return <Overlap4 data={props.data} />;
+}
+
+function Overlap4(props: any) {
+const { data: queryData } = useQuery(["getListQuery"], getListApi, {
+    refetchOnWindowFocus: false,
+    onSuccess: (response) => {
+      console.log("success", response);
+    },
+    onError: (error) => {
+      console.log("onError", error);
+    },
+    initialData: form.pg === "1" ? props.data : undefined, // 서버 사이드에서 받아온 데이터를 여기까지 넘겨주어야 함.
+    staleTime: Infinity,
+  });
+}
+```
+
+### 4) hydrate 사용
+
+이번 글의 메인 주제이며, 위 문제를 해결하기 위해 TanStack Query 공식 문서에서 권장하는 방법입니다. `hydrate`를 사용하려면 초기 설정이 필요하지만, 구조를 잡아두면 이후에는 별도 관리 포인트가 줄어든다는 장점이 있습니다.
+
+## hydrate 소개 및 적용방법
+
+앞서 언급했듯이 Next.js는 페이지 로딩 시 서버에서 클라이언트로 데이터를 전달하는데, pre-rendering된 정적 HTML과 번들된 JavaScript를 각각 전달합니다.
+
+따라서 클라이언트가 처음 전달받는 정적 페이지에는 이벤트 리스너, 상태, 함수 등 JavaScript 동작 요소가 없는 상태이고, 이후 전달받은 JavaScript를 DOM에 붙여 정상 동작하는 페이지로 만드는 과정을 `hydrate`라고 합니다.
+
+React Query에서도 Next.js의 hydrate처럼 서버 사이드에서 데이터를 prefetch한 후, 캐시된 데이터를 클라이언트가 재사용하도록 하는 방식을 지원합니다.
+Next.js에서 React Query의 hydrate를 사용하려면 우선 `_app.tsx`에 `Hydrate` 컴포넌트를 추가해주셔야 합니다.
+
+```jsx
+// pages/_app.tsx
+export default function App({ Component, pageProps }: AppPropsWithLayout) {
+  const queryClient = new QueryClient();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Hydrate state={pageProps.dehydratedState}>
+        <Component {...pageProps} />
+      </Hydrate>
+    </QueryClientProvider>
+  );
+}
+```
+
+그리고 서버 사이드에서 API를 handling하는 부분에도 `queryClient`를 생성해 데이터를 prefetch하도록 설정합니다.
+
+```jsx
+// pages/api/with-hydrate.tsx
+async function getData(req: NextApiRequest, res: NextApiResponse) {
+  const queryClient = new QueryClient();
+  await queryClient.prefetchQuery(["getListQuery"], getListApi, {
+    retry: 0,
+  });
+
+  const json = {
+    dehydratedState: dehydrate(queryClient),
+  };
+
+  res.send(json);
+}
+
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  await getData(req, res);
+}
+
+export default handler;
+```
+
+그리고 서버 사이드에서 클라이언트로 props를 내려줄 때 `dehydratedState`를 함께 넘겨주도록 합니다.
+
+```jsx
+// pages/with-hydrate.tsx
+
+// Server-side
+
+export const getServerSideProps = async ({ ctx }) => {
+  const fetchAPI = async () => {
+    const res = await fetch(`http://localhost:3000/api/with-hydrate`);
+
+    return await res.json();
+  };
+
+  const data = await fetchAPI();
+
+  return {
+    props: {
+      dehydratedState: data.dehydratedState,
+    },
+  };
+};
+
+
+// Client-side
+const WithHydrate: NextPageWithLayout = (props) => {
+  const { data: queryData } = useQuery(["getListQuery"], getListApi, {
+    retry: 0,
+    refetchOnWindowFocus: false,
+    onSuccess: (response) => {
+      console.log("success", response);
+    },
+    onError: (error) => {
+      console.log("onError", error);
+    },
+    staleTime: Infinity,
+  });
+
+  useEffect(() => {
+    console.log("queryData", queryData);
+  }, [queryData]);
+
+  return (
+    <div>
+      <h1>Using dehydratedState</h1>
+      <ul>
+        {queryData?.map((item: MockDataItemType, index) => (
+          <li key={index}>
+            <span>{item.id + " // " + item.email}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default WithHydrate;
+```
+
+## 주의사항
+
+- `useQuery` 옵션 중 `staleTime`은 해당 query가 “신선(fresh)”하다고 판단하는 시간을 의미합니다. `staleTime`을 너무 짧게 두면 클라이언트가 곧바로 “stale”로 판단해 재요청할 수 있으므로, 서비스 특성에 맞게 적절한 값을 설정해주시는 것이 좋습니다.
+
+## 결과
+
+![결과 이미지](/images/posts/react-query-hydrate/image.gif)
+왼쪽이 기존 코드, 오른쪽이 hydrate를 적용한 코드입니다. 페이지 로딩 속도가 개선된 모습을 확인할 수 있습니다. 만약 API 응답 시간이 더 길다면 이러한 차이는 더 두드러질 수 있습니다.
+
+## 샘플 코드
+
+[github 저장소 이동 (https://github.com/MochaChoco/react-query-hydrate)](https://github.com/MochaChoco/react-query-hydrate)
+
+## 참고 자료
+
+[React Query와 SSR](https://velog.io/@eomttt/React-Query-%EC%99%80-SSR#hydrate-%EB%9E%80)
+[Next.js Hydrate 개념](https://helloinyong.tistory.com/315)
+[tanStack Query 공식 문서](https://tanstack.com/query/v4/docs/react/guides/ssr#using-nextjs)

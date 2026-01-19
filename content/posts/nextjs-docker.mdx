@@ -1,0 +1,249 @@
+---
+title: "Next.js 프로젝트에 Docker 적용기"
+description: "Next.js 프로젝트를 Docker로 멀티 스테이지 빌드하고, standalone output 기반으로 이미지 크기를 줄이며 환경별 `.env`를 주입하는 과정을 정리합니다."
+date: "2023-08-28"
+tags: ["nextjs", "docker", "deployment"]
+slug: "nextjs-docker"
+coverImage: "/images/posts/nextjs-docker/cover.png"
+---
+
+<img
+  src="/images/posts/nextjs-docker/cover.png"
+  style={{ maxWidth: "420px" }}
+  alt="커버 이미지"
+/>
+
+배포를 위해 개발 중인 Next.js 프로젝트에 Docker를 적용해야 했습니다. 그동안 Docker는 백엔드 개발자분이 별도로 세팅해 전달해주신 것을 사용하는 정도였는데, 이번에는 공부하는 김에 직접 구성해보기로 했습니다.
+
+## Docker란?
+
+`Docker`는 `Container`를 이용해 `Application`을 신속하게 구축, 테스트, 배포할 수 있는 소프트웨어 플랫폼입니다. 여기서 말하는 Container는 표준화되고 실행 가능한 구성 요소이며, 애플리케이션의 소스 코드와 애플리케이션이 동작하는 운영 체제(OS), 라이브러리, 의존성(Dependency) 등을 조합한 것을 의미합니다.
+
+따라서 Docker를 사용하면 컨테이너로 실행 가능한 환경에서 프로젝트를 더 쉽게 배포할 수 있다는 장점이 있습니다.
+
+<img
+  src="/images/posts/nextjs-docker/image1.png"
+  style={{ maxWidth: "480px" }}
+  alt="이미지1"
+/>
+
+> ※ Virtual Machine과의 차이점
+> Docker는 Virtual Machine과 마찬가지로 리소스를 별도로 구분해 관리한다는 특징이 있지만, Virtual Machine은 OS 단위로 리소스를 구분하는 반면 Container는 Application 단위로 구분합니다.
+
+`docker build` 명령어를 사용하면 Image 파일이 생성되고, 이후 `docker run` 명령어로 앞서 생성된 Image를 기반으로 Container가 생성됩니다. 이처럼 Image와 Container는 1:N 관계입니다. 쉽게 말하면 붕어빵 틀(Image)과 붕어빵(Container) 같은 관계라고 볼 수 있습니다.
+
+## Dockerfile 작성 방법
+
+Dockerfile은 프로젝트 루트 폴더에 작성합니다. 아래 코드 블록은 Vercel 공식 repo의 Next.js용 Dockerfile을 참고하여 작성했으며, npm 대신 yarn을 사용한다는 전제를 두었습니다.
+
+```bash
+# Multi-stage build
+
+# 1단계: 환경 설정 및 dependency 설치
+FROM node:18-alpine AS deps
+RUN apk add --no-cache libc6-compat
+
+# 명령어를 실행할 디렉터리 지정
+WORKDIR /usr/src/app
+
+# Dependency install을 위해 package.json, yarn.lock 복사
+COPY package.json yarn.lock ./
+
+# Dependency 설치 (새로운 lock 파일 수정 또는 생성 방지)
+RUN yarn --frozen-lockfile
+
+###########################################################
+
+# 2단계: next.js 빌드 단계
+FROM node:18-alpine AS builder
+
+# Docker를 build할때 개발 모드 구분용 환경 변수를 명시함
+ARG ENV_MODE
+
+# 명령어를 실행할 디렉터리 지정
+WORKDIR /usr/src/app
+
+# node_modules 등의 dependency를 복사함.
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY . .
+
+# 구축 환경에 따라 env 변수를 다르게 가져가야 하는 경우, 환경 변수로 env를 구분합니다.
+COPY .env.$ENV_MODE ./.env.production
+RUN yarn build
+
+###########################################################
+
+# 3단계: next.js 실행 단계
+FROM node:18-alpine AS runner
+
+# 명령어를 실행할 디렉터리 지정
+WORKDIR /usr/src/app
+
+# container 환경에 시스템 사용자를 추가함
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# next.config.js에서 output을 standalone으로 설정하면
+# 빌드에 필요한 최소한의 파일만 ./next/standalone로 출력됩니다.
+# standalone 결과물에는 public 폴더와 static 폴더 내용이 포함되지 않으므로 별도로 복사합니다.
+COPY --from=builder /usr/src/app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/.next/static ./.next/static
+
+# 컨테이너의 수신 대기 포트를 3000으로 설정
+EXPOSE 3000
+
+# node로 애플리케이션 실행
+CMD ["node", "server.js"]
+
+# standalone으로 나온 결과값은 node 자체적으로만 실행 가능
+# CMD ["npm", "start"]
+```
+
+위 코드는 `Multi-stage build` 방식을 사용하고 있습니다. Multi-stage build는 Docker 17.05 버전에 도입된 기능으로, 이미지 구축을 위한 여러 단계를 하나의 Dockerfile 안에 정의하는 방식입니다.
+여기서는 의존성 설치, Next.js 빌드, Next.js 실행의 3단계로 나누어 Dockerfile을 작성했습니다.
+
+위 Dockerfile 예제는 실행에 필요한 일부 파일과 경량화된 Next.js 빌드 결과물만 이미지에 반영합니다.
+
+> ### Multi-Stage Build의 장점
+
+1. Build 과정을 더 작은 단계로 나누기 때문에 최종 Image에 필요하지 않은 파일을 제거하기 쉽습니다. 그 결과 Image 크기가 줄어들어 배포 시간이 단축되고 저장소 비용을 절감할 수 있습니다.
+2. 캐싱을 지원하므로 소스 코드나 의존성이 변경되지 않은 경우 재사용할 수 있습니다. 따라서 빌드 속도가 빨라지고 개발 주기를 단축하는 데 도움이 됩니다.
+
+### 1. 환경 설정 및 dependency 설치
+
+```bash
+# 1단계: 환경 설정 및 dependency 설치
+FROM node:18-alpine AS deps
+RUN apk add --no-cache libc6-compat
+
+# 명령어를 실행할 디렉터리 지정
+WORKDIR /usr/src/app
+
+# Dependency install을 위해 package.json, yarn.lock 복사
+COPY package.json yarn.lock ./
+
+# Dependency 설치 (새로운 lock 파일 수정 또는 생성 방지)
+RUN yarn --frozen-lockfile
+```
+
+`FROM`으로 사용할 이미지를 `node:18-alpine`로 지정하고, `AS` 키워드로 현재 단계의 이름을 `deps`로 지정합니다. 그리고 `RUN`으로 alpine의 패키지 매니저를 통해 `libc6-compat`를 설치합니다. `node:18-alpine`는 경량 이미지이므로 필요한 구성 요소가 누락될 수 있고, 이로 인해 호스트 시스템에 따라 `process.dlopen` 실행 시 오류가 발생하는 경우가 있습니다. 이를 방지하기 위해 `libc6-compat`를 추가로 설치합니다.
+
+`WORKDIR`로 내부 작업 디렉터리를 `/usr/src/app`로 설정하고, `COPY`로 호스트 시스템의 `package.json`, `yarn.lock` 파일을 이미지로 복사합니다.
+
+이후 Yarn으로 의존성(Dependency)을 설치하는데, 새로운 lock 파일이 생성/수정되는 것을 막기 위해 `--frozen-lockfile` 옵션을 사용합니다.
+
+### 2. next.js 빌드 단계
+
+```bash
+# 2단계: next.js 빌드 단계
+FROM node:18-alpine AS builder
+
+# Docker를 build할때 개발 모드 구분용 환경 변수를 명시함
+ARG ENV_MODE
+
+# 명령어를 실행할 디렉터리 지정
+WORKDIR /usr/src/app
+
+# node_modules 등의 dependency를 복사함.
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY . .
+
+# 구축 환경에 따라 env 변수를 다르게 가져가야 하는 경우, 환경 변수로 env를 구분합니다.
+COPY .env.$ENV_MODE ./.env.production
+RUN yarn build
+```
+
+1단계와 마찬가지로 `FROM`으로 사용할 이미지를 `node:18-alpine`로 지정하고, `AS`로 현재 단계의 이름을 `builder`로 지정합니다. 그 후 `ARG`로 환경 변수(`ENV_MODE`)를 정의하고, `WORKDIR`로 작업 디렉터리를 `/usr/src/app`로 지정합니다. 이 환경 변수는 아래에서 설명할 빌드 명령어의 인자(development 또는 production)로 사용됩니다.
+
+`COPY`로 1단계(deps)에서 의존성 설치 후 생성된 `node_modules` 폴더와 빌드에 필요한 파일들을 이미지로 복사합니다.
+또한 env 파일도 이 단계에서 함께 복사하는데, `yarn build`는 기본적으로 `.env.production`을 참조한다는 점을 고려해야 합니다. 따라서 구축 환경에 따라 env 변수를 다르게 가져가야 한다면, 해당 환경의 env 파일을 `.env.production`에 덮어쓰는 방식으로 처리했습니다.
+
+env 파일까지 복사한 뒤 `RUN yarn build`로 Next.js 결과물을 빌드합니다.
+
+### 3. next.js 실행 단계
+
+```bash
+# 3단계:  next.js 실행 단계
+FROM node:18-alpine AS runner
+
+# 명령어를 실행할 디렉터리 지정
+WORKDIR /usr/src/app
+
+# container 환경에 시스템 사용자를 추가함
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# next.config.js에서 output을 standalone으로 설정하면
+# 빌드에 필요한 최소한의 파일만 ./next/standalone로 출력됩니다.
+# standalone 결과물에는 public 폴더와 static 폴더 내용이 포함되지 않으므로 별도로 복사합니다.
+COPY --from=builder /usr/src/app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/.next/static ./.next/static
+
+# 컨테이너의 수신 대기 포트를 3000으로 설정
+EXPOSE 3000
+
+# node로 애플리케이션 실행
+CMD ["node", "server.js"]
+
+# standalone으로 나온 결과값은 node 자체적으로만 실행 가능
+# CMD ["npm", "start"]
+```
+
+1, 2단계와 마찬가지로 `FROM`으로 사용할 이미지를 `node:18-alpine`로 지정하고, `AS`로 현재 단계의 이름을 `runner`로 지정합니다. 이후 `WORKDIR`로 작업 디렉터리를 `/usr/src/app`로 지정한 다음, 컨테이너 환경에 시스템 사용자를 추가합니다.
+
+Docker 이미지 용량을 줄이기 위해서는 Next.js 빌드 결과물도 함께 경량화하는 것이 중요합니다. Next.js 공식 문서에서도 아래와 같은 방법을 소개하고 있습니다.
+
+```jsx
+// next.config.js
+const nextConfig = {
+  output: "standalone",
+};
+
+module.exports = nextConfig;
+```
+
+설정 방법은 간단합니다. `next.config.js` 파일에서 `output`을 `standalone`으로 설정하면 됩니다. 다만 이렇게 하면 정적 이미지나 폰트 등 public asset이 결과물에 포함되지 않기 때문에 별도로 복사해주는 과정이 필요합니다. 따라서 `COPY`로 standalone 폴더뿐만 아니라 프로젝트의 `public` 폴더도 함께 복사합니다.
+
+`EXPOSE`로 수신 대기 포트를 설정하고 실행 명령어를 정의하면 Dockerfile 작성이 완료됩니다.
+
+## 빌드 및 실행 테스트
+
+### 1. 이미지 빌드
+
+> - 개발 환경: docker build -t \<빌드할 Image 파일명\> -f ./Dockerfile . --build-arg ENV_MODE=development
+
+- 운영 환경: docker build -t \<빌드할 Image 파일명\> -f ./Dockerfile . --build-arg ENV_MODE=production
+  ex) docker build -t docker-test -f ./Dockerfile . --build-arg ENV_MODE=development
+
+앞서 설명했듯이 이미지 빌드는 `docker build` 명령어로 Dockerfile을 기반으로 Image를 생성하는 단계입니다.
+
+이번 Next.js 프로젝트는 개발 환경(development)과 운영 환경(production)에 따라 사용되는 API 키 등이 `.env` 파일로 분리되어 관리되고 있었습니다. 따라서 배포 환경에 따라 사용할 env 파일이 달라지므로 Docker 빌드 명령어도 구분되어야 합니다.
+
+### 2. 이미지 실행
+
+> - docker run -it --rm -p 3000:3000 \<빌드한 Image 파일명\>
+>   ex) docker run -it --rm -p 3000:3000 docker-test
+
+이미지 실행은 `docker run` 명령어로 앞서 빌드한 Image를 기반으로 Container를 생성하는 단계입니다. Container는 생성됨과 동시에 지정된 port에 바인딩됩니다.
+
+위에서 빌드한 Image 파일명을 입력하고 `localhost:3000`으로 들어가보면, Docker로 build한 Next.js 결과물이 정상적으로 출력되는 것을 확인할 수 있습니다.
+
+<img
+  src="/images/posts/nextjs-docker/image2.png"
+  style={{ maxWidth: "520px" }}
+  alt="이미지2"
+/>
+
+## 샘플 코드
+
+[github 저장소 이동](https://github.com/MochaChoco/docker-test)
+
+## 참고 자료
+
+- [Docker의 개념 및 핵심 설명](https://khj93.tistory.com/entry/Docker-Docker-%EA%B0%9C%EB%85%90)
+- [Next.js 프로젝트 docker 배포 + 이미지 크기 줄이기](https://velog.io/@jadenkim5179/Next.js-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8-docker-%EB%B0%B0%ED%8F%AC-%EC%9D%B4%EB%AF%B8%EC%A7%80-%ED%81%AC%EA%B8%B0-%EC%A4%84%EC%9D%B4%EA%B8%B0)
+- [Vercel - Dockerfile 작성 예시](https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile)
+- [Dockerfile 기본 명령어 정리](https://devlog-wjdrbs96.tistory.com/296)
+- [Docker 다단계 빌드 이해](https://earthly.dev/blog/docker-multistage/)

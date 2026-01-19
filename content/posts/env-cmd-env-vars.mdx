@@ -1,0 +1,88 @@
+---
+title: "env-cmd를 활용한 환경변수 설정"
+description: "React 프로젝트에서 `env-cmd`로 환경별 `.env` 파일을 선택해 빌드 시점 환경 변수를 주입하고, API 주소를 안전하게 분리 관리하는 방법을 정리합니다."
+date: "2023-08-06"
+tags: ["nodejs", "env", "react", "tooling"]
+slug: "env-cmd-env-vars"
+coverImage: "/images/posts/env-cmd-env-vars/cover.png"
+---
+
+![커버 이미지](/images/posts/env-cmd-env-vars/cover.png)
+
+React 프로젝트를 진행하면서 하나의 프로젝트에 동시에 여러 개의 개발 서버를 둬야 하는 상황이 생겼습니다. 개발 서버마다 DB가 달라 프론트엔드에서 사용하는 API 주소도 각각 다르게 설정되어야 했는데, 별도의 코드 분리 없이 API 주소만 분리 관리할 방법이 없을지 고민하다가 `env` 파일의 환경 변수를 활용하기로 했습니다.
+
+## env-cmd란?
+
+`env-cmd`는 env 파일을 관리할 때 더 자유로운 네이밍 규칙을 사용할 수 있게 해주고, env 파일을 여러 개로 나눠 환경별로 다른 환경 변수를 주입할 수 있도록 도와주는 라이브러리입니다. Node.js로 실행되는 환경이라면 어디서든 사용할 수 있다는 장점이 있습니다.
+
+## 적용방법
+
+우선 프로젝트 루트에 `.env`, `.env.development`, `.env.production` 파일을 만들고 아래처럼 값을 설정합니다.
+
+```env
+// .env
+REACT_APP_DEPLOY_MODE=local
+REACT_APP_FETCH_BASE_URL=http://www.fetch-url1.com
+
+// .env.development
+REACT_APP_DEPLOY_MODE=development
+REACT_APP_FETCH_BASE_URL=http://www.fetch-url2.com
+
+// .env.production
+REACT_APP_DEPLOY_MODE=production
+REACT_APP_FETCH_BASE_URL=http://www.fetch-url3.com
+```
+
+프로젝트 루트의 `package.json`을 열어 scripts를 아래처럼 수정합니다.
+
+```json
+"scripts": {
+    "start": "react-scripts start",
+    "build": "env-cmd -f .env react-scripts build",
+    "build-development": "env-cmd -f .env.development react-scripts build",
+    "build-production": "env-cmd -f .env.production react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+  },
+
+```
+
+이제 `yarn build`, `yarn build-development`, `yarn build-production` 명령어를 실행하면 각각 scripts에 지정한 `.env` 파일을 참조해 빌드합니다.
+
+```jsx
+// app.js
+function App() {
+  return (
+    <div className="App">
+      <h1>Deploy mode : {process.env.REACT_APP_DEPLOY_MODE}</h1>
+      <h2>Fetch base url : {process.env.REACT_APP_FETCH_BASE_URL}</h2>
+    </div>
+  );
+}
+```
+
+각 build별로 env 파일이 제대로 적용되었는지 확인하기 위해 `app.js`에서 환경 변수를 출력하도록 했습니다.
+
+## 결과
+
+### 1) yarn build
+
+![이미지1](/images/posts/env-cmd-env-vars/image1.png)
+
+### 2) yarn build-development
+
+![이미지1](/images/posts/env-cmd-env-vars/image2.png)
+
+### 3) yarn build-production
+
+![이미지1](/images/posts/env-cmd-env-vars/image3.png)
+
+각 build마다 설정된 env 환경 변수가 출력되는 것을 확인할 수 있습니다.
+
+## 샘플 코드
+
+[github 저장소 이동](https://github.com/MochaChoco/env-cmd-test)
+
+## 참고 자료
+
+- [react Build 및 실행하기](https://soonysoon.tistory.com/88)

@@ -1,0 +1,98 @@
+---
+title: "requestAnimationFrame과 cancelAnimationFrame의 관계"
+description: "`requestAnimationFrame`이 반복 호출될 때의 특성과, 종료 시점에 `cancelAnimationFrame`으로 정리하지 않으면 발생할 수 있는 성능/메모리 이슈를 정리합니다."
+date: "2023-08-09"
+tags: ["javascript", "performance", "animation"]
+slug: "animation-frame-optimization"
+coverImage: "/images/posts/animation-frame-optimization/cover.png"
+---
+
+QA팀으로부터 현재 운영 중인 웹사이트 관련 리포트를 몇 건 전달받았습니다. 사이트를 탐색하다 보면 전체적으로 느려진다는 내용이었는데, 리포트들의 공통점은 특정 애니메이션을 실행한 이후부터 사이트가 느려진다는 점이었습니다.
+
+해당 애니메이션은 loop되는 구조로, 특정 영역에 `mouseEnter` 하면 재생되었다가 `mouseLeave` 하면 애니메이션이 숨김 처리되는 형식이었습니다. 애니메이션을 재생한 상태에서 개발자 도구로 성능/메모리 상태를 살펴보니 `Animation Frame Fired` 항목이 가장 높은 점유율을 차지했고, 애니메이션이 화면에서 사라졌음에도 지속적으로 리소스를 점유한다는 사실을 확인했습니다.
+
+![커버 이미지](/images/posts/animation-frame-optimization/cover.png)
+
+그래서 애니메이션 최적화 방법을 찾아보니 `requestAnimationFrame`이 계속 언급되었고, 마침 운영 중인 사이트에서도 이를 사용하고 있길래 관심을 갖게 되었습니다. 그렇다면 `requestAnimationFrame`이 무엇이며, 이를 어떻게 “정상적으로 종료”해야 할까요?
+
+## requestAnimationFrame이란?
+
+> JavaScript의 내장 함수로, 다음 프레임에 실행할 애니메이션 콜백을 등록하고 브라우저가 적절한 시점에 호출하도록 하는 API입니다.
+
+기존 `setInterval`과 달리 디스플레이 주사율에 맞춰 호출 시점이 조절되고, 백그라운드 상태에서는 호출이 제한(또는 중단)된다는 장점이 있습니다.
+
+다만 유의해야 할 점이 있습니다. `setInterval`은 `clearInterval`로 타이머를 해제하듯이, `requestAnimationFrame`도 종료 조건이 없다면 `cancelAnimationFrame`으로 루프를 정리해주셔야 합니다.
+
+```jsx
+
+// 애니메이션 id를 저장할 변수
+let id = 0;
+
+
+...
+function init(){
+	...
+    console.log("animation start!!");
+    animate();
+}
+
+...
+// 매 프레임마다 id를 갱신한다.
+function animate() {
+	console.log("animate...");
+	id = requestAnimationFrame(animate);
+}
+
+...
+// 애니메이션 종료 시점에 호출하여 저장해둔 id를 인자로 전달합니다.
+function destroy(){
+	console.log("animation end // animation id : ", id);
+  	cancelAnimationFrame(id);
+}
+
+```
+
+사용법은 간단합니다. `requestAnimationFrame`은 id를 반환하므로, 해당 id를 저장해두었다가 애니메이션을 종료해야 하는 시점에 `cancelAnimationFrame(id)`를 호출하면 됩니다.
+
+## cancelAnimationFrame 적용 비교
+
+`cancelAnimationFrame`이 잘 동작하는지 확인하기 위해 간단한 테스트 코드를 만들어 보았습니다. 영역을 하나 만들고 `mouseEnter` 하면 애니메이션이 재생되고, `mouseLeave` 하면 애니메이션이 사라지면서 멈추는 형식입니다. 해당 영역에 마우스를 처음 10초 동안 `mouseEnter` 상태로 두고, 다음 10초는 `mouseLeave` 상태로 두는 방식으로 테스트했습니다.
+
+### cancelAnimationFrame 함수 적용 전
+
+![이미지1](/images/posts/animation-frame-optimization/image1.png)
+
+<img
+  src="/images/posts/animation-frame-optimization/image2.gif"
+  style={{ maxWidth: "480px" }}
+  alt="이미지2"
+/>
+
+### cancelAnimationFrame 함수 적용 후
+
+![이미지3](/images/posts/animation-frame-optimization/image3.png)
+
+<img
+  src="/images/posts/animation-frame-optimization/image4.gif"
+  style={{ maxWidth: "480px" }}
+  alt="이미지4"
+/>
+
+위가 `cancelAnimationFrame` 적용 전이고, 아래가 적용 후입니다. 위 그래프는
+10초가 지나도 파란색 그래프가 일정한 높이에서 유지되는 반면, 아래 그래프는
+10초가 지나자 확 줄어드는 모습을 볼 수 있습니다. 콘솔 로그를 비교해봐도, 적용
+전에는 `animate` 함수가 계속 실행되어 불필요한 작업이 누적되는 것을 확인할 수
+있습니다.
+
+이 결과를 참고해 실제 웹사이트에서도 `cancelAnimationFrame`을 적용하니, 애니메이션이 사라진 후에도 계속 리소스를 점유하던 현상이 사라졌고 사이트가 느려지는 문제도 해결되었습니다.
+
+## 샘플 코드
+
+[github 저장소 이동](https://github.com/MochaChoco/request-animation-frame)
+
+## 참고 자료
+
+- [웹 애니메이션 최적화 requestAnimationFrame 가이드](https://inpa.tistory.com/entry/%F0%9F%8C%90-requestAnimationFrame-%EA%B0%80%EC%9D%B4%EB%93%9C)
+- [[JS] requestAnimationFrame/cancelAnimationFrame원리와 사용 방법 (Feat. 브라우저 작동 방식)](https://curryyou.tistory.com/520)
+- [[자바스크립트] RequestAnimationFrame()을 사용하는 방법 및 예제](<https://webisfree.com/2020-03-19/[%EC%9E%90%EB%B0%94%EC%8A%A4%ED%81%AC%EB%A6%BD%ED%8A%B8]-requestanimationframe()%EC%9D%84-%EC%82%AC%EC%9A%A9%ED%95%98%EB%8A%94-%EB%B0%A9%EB%B2%95-%EB%B0%8F-%EC%98%88%EC%A0%9C>)
+- [Chrome DevTools로 JS 메모리 누수(Memory Leak) 디버깅하기](https://blog.eunsukim.me/posts/debugging-javascript-memory-leak-with-chrome-devtools)

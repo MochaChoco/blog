@@ -1,0 +1,63 @@
+---
+title: "Node.js 기반 시스템에서 lock 파일의 역할"
+description: "로컬/개발 서버에서 의존성 버전이 달라 UI 동작이 달라졌던 경험을 바탕으로, `yarn.lock`/`package-lock.json` 같은 lock 파일이 왜 필요한지 정리합니다."
+date: "2023-08-18"
+tags: ["nodejs", "npm", "yarn", "dependency"]
+slug: "nodejs-lockfile-role"
+coverImage: "/images/posts/nodejs-lockfile-role/cover.png"
+---
+
+<img
+  src="/images/posts/nodejs-lockfile-role/cover.png"
+  style={{ maxWidth: "420px" }}
+  alt="커버 이미지"
+/>
+
+`vuetify`를 사용하는 `nuxt` 프로젝트가 있었는데, 로컬에서 잘 적용되던 style이 개발 서버에서 특정 태그에만 적용되지 않는 현상이 발생했습니다.
+
+![이미지1](/images/posts/nodejs-lockfile-role/image1.png)
+
+특정 태그만 style이 제대로 적용되지 않는 것이 이상해 개발자 도구로 로컬과 개발 서버의 `DOM` 구조를 살펴보았습니다. 그러자 위 사진처럼 로컬과 개발 서버의 구조가 다른 것을 발견했습니다.
+
+이것이 원인이라고 판단해, 개발자 도구에서 시험 삼아 DOM을 수동으로 일치시켜보니 그제서야 style이 제대로 적용되는 것을 확인했습니다.
+
+## 같은 코드임에도 DOM이 일치하지 않는 이유
+
+그렇다면 로컬과 개발 서버의 DOM 구조가 왜 일치하지 않는지 원인을 찾아야 했습니다. 애초에 로컬과 개발 서버는 동일한 Git 저장소를 바라보고 있었고, 둘 다 최신 상태였기 때문에 코드도 동일한 상황이었습니다.
+
+개발 서버가 구축된 PC에 원격으로 접속해 파일을 확인하던 도중, `.gitignore` 설정 때문에 Git에 올라가지 않는 `yarn.lock` 파일 내용이 로컬과 다르다는 것을 발견했습니다.
+
+![이미지2](/images/posts/nodejs-lockfile-role/image2.png)
+
+`package.json` 파일을 열어보니 vuetify 버전이 `^3.3.1`로 표기되어 있었습니다. 이는 npm 또는 yarn으로 라이브러리를 설치하는 시점에 `3.3.1 ~ 4.0.0` 범위 안에서 최신 버전을 설치하라는 의미입니다.
+
+```json
+...
+
+// package.json
+"dependencies": {
+    "vuetify": "^3.3.1",
+}
+
+...
+
+```
+
+vuetify 3.3.1과 3.3.9 사이에는 몇 달의 텀이 있는데, 그 사이에 일부 컴포넌트의 DOM 구조 변경이 있었다고 합니다. 따라서 로컬 환경보다 3~4개월 뒤에 구축된 개발 서버에서는 vuetify가 더 최신 버전으로 설치되었고, 그 결과 로컬 환경과 DOM 구조가 달라지는 현상이 발생했던 것입니다.
+
+## 라이브러리 버전을 동일하게 유지하는 방법?
+
+의외로 방법은 간단합니다. 프로젝트 루트의 `.gitignore`에 `yarn.lock` 또는 `package-lock.json`이 등록되어 있다면 해당 항목을 제거하고, lock 파일을 Git에 함께 올리면 됩니다.
+
+## yarn.lock과 package-lock.json의 역할
+
+이 파일은 생성 시점의 의존성 트리에 대한 정확한 정보를 가지고 있습니다. 즉 Node.js 패키지 매니저가 라이브러리를 설치할 때, 어떤 버전이 선택되었는지에 대한 정보가 기록됩니다. `yarn`으로 설치하면 `yarn.lock`이, `npm install`로 설치하면 `package-lock.json`이 갱신됩니다. 따라서 다른 환경에서 동일한 결과로 프로젝트를 설치/빌드하려면, 이 lock 파일들도 함께 관리되어야 합니다.
+
+## 마치며
+
+보통 라이브러리를 설치하면 자동으로 lock 파일이 생성되다 보니, 그동안 왜 필요한지 깊게 생각해보지 못했습니다. 하지만 이번 경험을 통해 lock 파일이 왜 생성되는지, 그리고 왜 반드시 함께 관리해야 하는지 확실히 이해할 수 있었습니다.
+
+## 참고 자료
+
+- [package-lock.json은 왜 필요할까?](https://hyunjun19.github.io/2018/03/23/package-lock-why-need/)
+- [package.json 버전 표기법](https://lunadaddy.tistory.com/80)
