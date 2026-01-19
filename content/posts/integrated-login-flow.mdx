@@ -31,7 +31,7 @@ coverImage: "/images/posts/integrated-login-flow/cover.png"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      통합 로그인 및 회원가입 전체 플로우                       │
+│                      통합 로그인 및 회원가입 전체 플로우                            │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 1. [프론트엔드] 사용자가 로그인 방식 선택
@@ -177,14 +177,12 @@ onMounted(() => {
 **핵심 구현 사항**:
 
 1. **쿼리 파라미터 보존**
-
    - 외부 서비스에서 로그인 요청 시 전달된 쿼리 파라미터를 스토어에 저장
    - OAuth 요청(`client_id`, `response_type`, `scope`)이나 서비스 요청(`serviceId`, `callbackUrl`) 정보를 유지
    - 외부에서 유입되는 OAuth 파라미터는 snake_case로 들어오기 때문에, 내부에서는 camelCase로 정규화하여 전 구간에서 동일한 키로 처리
    - 로그인/회원가입 완료 후 원래 서비스로 복귀하기 위한 정보
 
 2. **라우팅 시 쿼리 전달**
-
    - `:to="{ path: '/login', query: { ...route.query } }"`로 현재 쿼리를 그대로 전달
    - 이메일 로그인 페이지로 이동할 때도 OAuth/서비스 정보 유지
 
@@ -217,7 +215,7 @@ const onScriptLoaded = () => {
   // OAuth Token Client 초기화 및 토큰 요청
   tokenClient.value = SocialAuthService.Google.init(
     import.meta.env.VITE_GOOGLE_CLIENT_ID,
-    onAuthSuccess
+    onAuthSuccess,
   );
   tokenClient.value.requestAccessToken();
 };
@@ -246,13 +244,11 @@ const onClickHandler = () => {
 **핵심 구현 사항**:
 
 1. **환경 자동 감지**
-
    - `window.AppBridge.startSocialLogin` 존재 여부로 WebView 판단
    - WebView: 앱 브리지로 인증 페이지 열기 → Intent URI로 복귀
    - 일반 웹: OAuth SDK 스크립트 동적 로드 → 팝업 인증
 
 2. **동적 스크립트 로드**
-
    - 사용자 클릭 시점에 SDK 스크립트 로드
    - 로드 완료 후 즉시 `requestAccessToken()` 호출하여 OAuth 팝업 표시
 
@@ -281,7 +277,7 @@ function handleNaverLogin() {
   // Naver OAuth 초기화 (mode=LOGIN + 현재 쿼리 파라미터 전달)
   const naverAuth = SocialAuthService.Naver.init(
     "LOGIN",
-    buildQueryString(route.query)
+    buildQueryString(route.query),
   );
 
   // Naver OAuth 인증 페이지로 전체 페이지 리다이렉트
@@ -293,7 +289,6 @@ function handleNaverLogin() {
 **핵심 구현 사항**:
 
 1. **쿼리 파라미터 전달**
-
    - 현재 페이지의 모든 쿼리 파라미터를 콜백 URL에 포함
    - OAuth 완료 후 동일한 파라미터로 복귀
 
@@ -372,7 +367,7 @@ async function onSubmit() {
     await authStore.login(
       formFields.value.email.value,
       formFields.value.password.value,
-      rememberMe.value
+      rememberMe.value,
     );
 
     // 2. 후처리 로직 실행
@@ -398,13 +393,11 @@ async function handlePostLogin() {
 **핵심 구현 사항**:
 
 1. **폼 유효성 검증**
-
    - 이메일: 정규식으로 형식 검증
    - 비밀번호: 최소 6자 이상
    - `useFormValidation` 컴포저블로 재사용 가능한 검증 로직
 
 2. **로그인 상태 유지**
-
    - `rememberMe` 체크박스로 사용자 선택
    - 백엔드에 파라미터 전달
    - 백엔드에서 장기 쿠키 생성
@@ -636,13 +629,11 @@ export function usePostAuth() {
 **핵심 구현 사항**:
 
 1. **쿼리 파라미터 기반 분기**
-
    - OAuth: `response_type`, `client_id`, `redirect_uri`, `scope` 필수
    - 서비스: `serviceId`, `callbackUrl` 필수
    - 우선순위: OAuth > 서비스 > 메인 페이지
 
 2. **OAuth 2.0 플로우**
-
    - `hasOAuthConsent()`: 승인 이력 확인
    - 승인 이력 있음: 즉시 인증 코드 발급
    - 승인 이력 없음: `/consent` 페이지로 이동
@@ -774,7 +765,7 @@ export const useSignupStore = defineStore(
         { storage: sessionStorage, paths: ["email", "currentStep" /* ... */] },
       ],
     },
-  }
+  },
 );
 ```
 

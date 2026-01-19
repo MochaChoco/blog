@@ -48,7 +48,7 @@ coverImage: "/images/posts/webview-google-login/cover.png"
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      웹뷰 구글 소셜 로그인 전체 플로우                        │
+│                      웹뷰 구글 소셜 로그인 전체 플로우                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 1. [웹뷰] 사용자가 구글 로그인 버튼 클릭
@@ -136,7 +136,7 @@ const onScriptLoaded = (event = null) => {
     // Google GSI 토큰 클라이언트 초기화
     tokenClient.value = SocialAuth.Google.init(
       import.meta.env.VITE_GOOGLE_CLIENT_ID,
-      onLoggedInHandler
+      onLoggedInHandler,
     );
     tokenClient.value.requestAccessToken();
   } catch (error) {
@@ -179,7 +179,6 @@ const onClickHandler = () => {
 **핵심 구현 사항:**
 
 1. **웹뷰 환경 자동 감지**
-
    - `window.WebViewBridge.openExternalBrowser` 함수의 존재 여부로 웹뷰 환경 판단
    - 별도의 URL 파라미터나 설정 없이 JavaScript 인터페이스만으로 감지
    - 이 방식으로 웹과 웹뷰 환경에서 동일한 코드베이스 사용 가능
@@ -207,7 +206,7 @@ const onScriptLoaded = (event = null) => {
     tokenClient = SocialAuth.Google.init(
       import.meta.env.VITE_GOOGLE_CLIENT_ID,
       onLoggedInHandler,
-      onErrorHandler
+      onErrorHandler,
     );
     tokenClient.requestAccessToken(); // 페이지 로드 즉시 Access Token 요청
   } catch (error) {
@@ -239,9 +238,9 @@ const onLoggedInHandler = async (tokenResponse) => {
 
   // Android Intent URI (딥링크) 생성
   const intentUrl = `intent://callback?openUrl=${encodeURIComponent(
-    fullUrl
+    fullUrl,
   )}#Intent;scheme=myapp;package=com.example.app;S.browser_fallback_url=${encodeURIComponent(
-    fullUrl
+    fullUrl,
   )};end;`;
 
   console.log("redirect to intentUrl:", intentUrl);
@@ -271,13 +270,11 @@ onMounted(() => {
 **핵심 구현 사항:**
 
 1. **자동 인증 시작**
-
    - 페이지 로드 시 Google GSI 스크립트를 자동으로 로드
    - 스크립트 로드 완료 즉시 `requestAccessToken()` 호출하여 인증 팝업 표시
    - 사용자가 별도의 버튼 클릭 없이 바로 구글 로그인 진행
 
 2. **Android Intent URI 생성**
-
    - `scheme`: `myapp` (앱에 등록한 커스텀 스킴)
    - `host`: `callback` (앱 내에서 정의한 딥링크 호스트)
    - `openUrl` 파라미터: 웹뷰에서 로드할 콜백 URL (URL 인코딩)
@@ -285,7 +282,6 @@ onMounted(() => {
    - `S.browser_fallback_url`: 앱이 없을 경우 대체 URL
 
 3. **사용자 인터랙션 필수**
-
    - 브라우저 보안 정책상 사용자 클릭 없이는 딥링크 실행 불가
    - `showConfirmDialog`로 확인 다이얼로그 표시
    - 사용자가 "확인" 클릭 시 Intent URI로 이동하여 앱 복귀
@@ -334,11 +330,9 @@ onMounted(async () => {
 **핵심 구현 사항:**
 
 1. **쿼리 파라미터 추출**
-
    - `token`: Google Access Token
 
 2. **백엔드 API 호출**
-
    - `social.login()`: `/api/auth/social/login` API 호출
    - Google Access Token으로 사용자 인증 및 로그인 처리
    - 기존 회원이면 로그인, 신규면 회원가입 플로우로 이동
@@ -386,13 +380,11 @@ export function useSocial() {
 **핵심 구현 사항:**
 
 1. **백엔드 API 연동**
-
    - `/api/auth/social/login`: 소셜 로그인 API
    - `/api/auth/social/check`: 소셜 계정 존재 여부 확인 API
    - Provider와 Social Token을 전달하여 인증
 
 2. **에러 처리 및 회원가입 플로우**
-
    - 로그인 실패 시 다양한 케이스별 처리
    - 신규 사용자는 회원가입 페이지로 이동
    - 이메일 중복, 소셜 계정 이미 연동 등 상황별 안내
@@ -408,7 +400,6 @@ export function useSocial() {
 이번 웹뷰 환경에서의 구글 소셜 로그인 플로우 개선 작업을 통해 다음과 같은 성과를 달성했습니다:
 
 1. **웹뷰 팝업 차단 문제 완전 해결**
-
    - 다양한 웹뷰 환경에서 구글 로그인 불가 문제 해결
    - 외부 브라우저 + 딥링크 방식으로 안정적인 인증 플로우 구현
 
@@ -422,12 +413,10 @@ export function useSocial() {
 다양한 환경에서 철저한 테스트를 진행했습니다:
 
 - **일반 웹 브라우저 (Chrome, Safari, Edge)**
-
   - Google GSI 라이브러리를 통한 팝업 기반 로그인 정상 동작
   - 기존 기능에 영향 없음 확인
 
 - **안드로이드 웹뷰 환경**
-
   - `WebViewBridge.openExternalBrowser()` 호출 → 외부 브라우저 열기
   - 구글 인증 완료 → 사용자 확인 얼럿 → Intent 딥링크 실행
   - 앱 복귀 → `/auth/callback/google` 로드 → 백엔드 로그인 API 호출
@@ -441,17 +430,14 @@ export function useSocial() {
 ### 주요 기술적 도전과 해결
 
 1. **브라우저 보안 정책 대응**
-
    - **문제**: 딥링크 자동 호출 시 브라우저 보안 정책으로 차단
    - **해결**: 사용자 확인 얼럿 추가 → 명시적인 클릭 이벤트로 딥링크 실행
 
 2. **URL 인코딩 이슈**
-
    - **문제**: URL 파라미터에 특수문자 포함 시 딥링크 파싱 오류
    - **해결**: `encodeURIComponent()` 사용한 철저한 URL 인코딩
 
 3. **Google API와 Vue Reactivity 충돌**
-
    - **문제**: `ref(tokenClient)`로 선언 시 Google API 내부 오류 발생
    - **해결**: `let tokenClient = null`로 일반 변수 사용
 
@@ -462,19 +448,16 @@ export function useSocial() {
 ### 남은 과제 및 향후 개선 방향
 
 1. **iOS 웹뷰 환경 지원**
-
    - 현재는 Android Intent URI 기반 구현
    - iOS Universal Links 또는 Custom URL Schemes 방식 추가 필요
    - `window.webkit.messageHandlers` 활용한 iOS 브리지 구현 필요
 
 2. **다중 파트너 앱 지원**
-
    - 현재 `package` 파라미터가 하드코딩됨
    - 동적으로 앱 패키지 식별 및 딥링크 생성 로직 필요
    - 쿼리 파라미터로 앱 식별자 전달 방식 검토
 
 3. **에러 모니터링 및 로깅 강화**
-
    - 각 단계별 성공/실패 이벤트 트래킹
    - 구글 인증 실패, 딥링크 호출 실패 등 상세 로그 수집
    - 사용자 경험 개선을 위한 데이터 분석
