@@ -8,7 +8,11 @@ interface RelatedPostsProps {
   posts: PostMeta[];
 }
 
+/**
+ * 포스트 상세 페이지 하단에 표시되는 연관 포스트 목록 컴포넌트
+ */
 export function RelatedPosts({ posts }: RelatedPostsProps) {
+  // 연관된 글이 없으면 아무것도 렌더링하지 않음
   if (posts.length === 0) return null;
 
   return (
@@ -23,7 +27,11 @@ export function RelatedPosts({ posts }: RelatedPostsProps) {
   );
 }
 
+/**
+ * 개별 연관 포스트 카드 컴포넌트
+ */
 function RelatedPostCard({ post }: { post: PostMeta }) {
+  // 커버 이미지가 없을 경우 기본 이미지 사용
   const defaultCover = withBasePath("/images/default-blog-cover.png");
   const coverImage = post.frontmatter.coverImage
     ? withBasePath(post.frontmatter.coverImage)
@@ -51,6 +59,7 @@ function RelatedPostCard({ post }: { post: PostMeta }) {
           <p className="text-sm text-muted-foreground line-clamp-2 flex-1">
             {post.frontmatter.description}
           </p>
+          {/* 태그 목록: 최대 3개까지만 표시하고 나머지는 숫자로 표시 */}
           <div className="flex flex-wrap gap-1 mt-2 pt-2">
             {post.frontmatter.tags?.slice(0, 3).map((tag) => (
               <span

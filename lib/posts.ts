@@ -100,6 +100,12 @@ export async function getPostAdjacent(slug: string): Promise<{
   return { prev, next };
 }
 
+/**
+ * 현재 포스트와 연관된 포스트 목록을 가져옵니다.
+ * @param slug 현재 포스트의 슬러그 (추천에서 제외하기 위함)
+ * @param tags 현재 포스트의 태그 목록
+ * @param limit 가져올 최대 개수
+ */
 export async function getRelatedPosts(
   slug: string,
   tags: string[] = [],
@@ -111,21 +117,22 @@ export async function getRelatedPosts(
 
   const relatedPosts = posts
     .filter((post) => {
-      // Exclude current post
+      // 현재 읽고 있는 글은 제외
       if (post.slug === slug) return false;
       
-      // Check for tag intersection
+      // 태그가 하나라도 겹치는 글만 필터링
       const postTags = post.frontmatter.tags || [];
       return tags.some((tag) => postTags.includes(tag));
     })
     .map((post) => {
-      // Calculate relevance score (number of matching tags)
+      // 연관도 점수 계산: 겹치는 태그의 개수
       const postTags = post.frontmatter.tags || [];
       const matchingTags = postTags.filter((tag) => tags.includes(tag)).length;
       return { ...post, relevance: matchingTags };
     })
     .sort((a, b) => {
-      // Sort by relevance (desc) then by date (desc)
+      // 1순위: 겹치는 태그가 많은 순 (연관도 내림차순)
+      // 2순위: 최신순 (날짜 내림차순)
       if (a.relevance !== b.relevance) {
         return b.relevance - a.relevance;
       }
@@ -133,6 +140,6 @@ export async function getRelatedPosts(
     })
     .slice(0, limit);
 
-  // Remove the temporary relevance property before returning
+  // 계산을 위해 임시로 추가했던 relevance 속성 제거 후 반환
   return relatedPosts.map(({ relevance, ...post }) => post);
 }

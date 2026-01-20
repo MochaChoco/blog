@@ -98,7 +98,7 @@ export function ShareButtons({ title, url, className }: ShareButtonsProps) {
       <button
         onClick={handleCopy}
         className={cn(
-          "p-2 rounded-full transition-colors duration-200 text-muted-foreground border border-transparent hover:bg-muted hover:border-border",
+          "p-2 rounded-full transition-colors duration-200 text-muted-foreground border border-transparent hover:bg-muted hover:border-border cursor-pointer",
           copied && "text-green-600 bg-green-50 dark:bg-green-900/20",
         )}
         aria-label="Copy link"

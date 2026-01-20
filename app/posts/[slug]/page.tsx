@@ -1,4 +1,5 @@
 import { getAllPosts, getPostBySlug, getPostAdjacent, getRelatedPosts } from "@/lib/posts";
+import Link from "next/link";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import rehypePrettyCode from "rehype-pretty-code";
 import { rehypeBasePath } from "@/lib/rehype-base-path";
@@ -158,9 +159,13 @@ export default async function PostPage({
         </time>
         <div className="flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
           {post.frontmatter.tags?.map((tag) => (
-            <span key={tag} className="bg-secondary px-2 py-1 rounded-md">
+            <Link
+              key={tag}
+              href={`/tags/${tag}`}
+              className="bg-secondary px-2 py-1 rounded-md hover:bg-secondary/80 transition-colors"
+            >
               #{tag}
-            </span>
+            </Link>
           ))}
         </div>
         <div className="flex justify-center mt-4">
