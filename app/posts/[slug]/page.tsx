@@ -1,4 +1,4 @@
-import { getAllPosts, getPostBySlug, getPostAdjacent } from "@/lib/posts";
+import { getAllPosts, getPostBySlug, getPostAdjacent, getRelatedPosts } from "@/lib/posts";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import rehypePrettyCode from "rehype-pretty-code";
 import { rehypeBasePath } from "@/lib/rehype-base-path";
@@ -10,6 +10,8 @@ import { withBasePath } from "@/lib/base-path";
 import type { ComponentPropsWithoutRef } from "react";
 import { PostNavigation } from "@/components/post-navigation";
 import { ScrollToTop } from "@/components/scroll-to-top";
+import { ShareButtons } from "@/components/share-buttons";
+import { RelatedPosts } from "@/components/related-posts";
 
 export async function generateStaticParams() {
   const posts = await getAllPosts();
@@ -142,6 +144,9 @@ export default async function PostPage({
     notFound();
   }
 
+  const relatedPosts = await getRelatedPosts(slug, post.frontmatter.tags);
+  const postUrl = buildUrl(`/posts/${post.slug}`);
+
   return (
     <article className="mx-auto max-w-4xl py-8 sm:py-10">
       <div className="space-y-4 mb-10 text-center">
@@ -157,6 +162,9 @@ export default async function PostPage({
               #{tag}
             </span>
           ))}
+        </div>
+        <div className="flex justify-center mt-4">
+          <ShareButtons title={post.frontmatter.title} url={postUrl} />
         </div>
       </div>
       <div className="prose prose-sm max-w-none prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-a:text-blue-600 dark:prose-a:text-blue-400 dark:prose-invert sm:prose-base">
@@ -180,6 +188,7 @@ export default async function PostPage({
         />
       </div>
       <PostNavigation prev={prev} next={next} />
+      <RelatedPosts posts={relatedPosts} />
       <ScrollToTop />
     </article>
   );

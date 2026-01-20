@@ -99,3 +99,40 @@ export async function getPostAdjacent(slug: string): Promise<{
 
   return { prev, next };
 }
+
+export async function getRelatedPosts(
+  slug: string,
+  tags: string[] = [],
+  limit: number = 3
+): Promise<PostMeta[]> {
+  const posts = await getAllPosts();
+  
+  if (tags.length === 0) return [];
+
+  const relatedPosts = posts
+    .filter((post) => {
+      // Exclude current post
+      if (post.slug === slug) return false;
+      
+      // Check for tag intersection
+      const postTags = post.frontmatter.tags || [];
+      return tags.some((tag) => postTags.includes(tag));
+    })
+    .map((post) => {
+      // Calculate relevance score (number of matching tags)
+      const postTags = post.frontmatter.tags || [];
+      const matchingTags = postTags.filter((tag) => tags.includes(tag)).length;
+      return { ...post, relevance: matchingTags };
+    })
+    .sort((a, b) => {
+      // Sort by relevance (desc) then by date (desc)
+      if (a.relevance !== b.relevance) {
+        return b.relevance - a.relevance;
+      }
+      return a.frontmatter.date < b.frontmatter.date ? 1 : -1;
+    })
+    .slice(0, limit);
+
+  // Remove the temporary relevance property before returning
+  return relatedPosts.map(({ relevance, ...post }) => post);
+}
