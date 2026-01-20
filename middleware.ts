@@ -9,6 +9,8 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // _next, api 호출, favicon.ico, svg, png 파일은 제외
-  matcher: ["/((?!_next/|api/|favicon\\.ico$|.*\\.svg$|.*\\.png$).*)"],
+  // _next, api 호출, favicon.ico, svg, png, jpg, webp, gif 파일은 제외
+  matcher: [
+    "/((?!_next/|api/|favicon\\.ico$|.*\\.svg$|.*\\.png$|.*\\.jpg$|.*\\.webp$|.*\\.gif$).*)",
+  ],
 };
