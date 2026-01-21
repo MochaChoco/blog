@@ -115,10 +115,11 @@ body {
   background-color: transparent;
 }
 
-/* 링크가 컨테이너를 벗어나지 않도록 줄바꿈 처리 */
-.prose a {
-  word-break: break-all;
+/* 글 전체가 컨테이너를 벗어나지 않도록 처리 */
+.prose {
   overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 /* 다크 모드에서 링크 색상 조정 */
