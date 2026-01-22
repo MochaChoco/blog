@@ -71,6 +71,7 @@ body {
 
 html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 /* 모든 포스팅 본문 내 이미지 스타일 */
