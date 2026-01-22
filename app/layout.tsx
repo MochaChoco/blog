@@ -3,11 +3,12 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers";
 import { Header } from "@/components/header";
-import { SITE_ICONS } from "@/lib/metadata";
+import { SITE_ICONS, SITE_URL } from "@/lib/metadata";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "MochaChoco's DevBlog",
   description: "A technical blog built with Next.js",
   icons: SITE_ICONS,

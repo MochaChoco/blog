@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 
-const SITE_URL = "https://mochachoco.github.io/blog";
+const DEFAULT_SITE_URL = "https://mochachoco.github.io/blog";
+const LOCAL_SITE_URL = "http://localhost:3000";
+const isExport =
+  process.env.NEXT_PUBLIC_EXPORT === "true" ||
+  process.env.GITHUB_PAGES === "true" ||
+  process.env.GITHUB_ACTIONS === "true";
+
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (isExport ? DEFAULT_SITE_URL : LOCAL_SITE_URL);
 
 const DEFAULT_TITLE = "MochaChoco's DevBlog";
 const DEFAULT_DESCRIPTION = "웹 개발자의 기술블로그입니다.";
@@ -12,15 +21,6 @@ const DEFAULT_KEYWORDS = [
   "dev",
 ];
 const DEFAULT_IMAGE = "/images/og-image.png";
-
-export const SITE_ICONS: Metadata["icons"] = {
-  icon: [
-    { url: "/favicon.ico" },
-    { url: "/favicon.svg", type: "image/svg+xml" },
-    { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
-  ],
-  apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
-};
 
 const siteUrl = new URL(SITE_URL);
 const siteOrigin = siteUrl.origin;
@@ -39,6 +39,25 @@ const toAbsoluteUrl = (pathOrUrl: string) => {
     ? pathOrUrl
     : `/${pathOrUrl}`;
   return buildUrl(withLeadingSlash);
+};
+
+export const SITE_ICONS: Metadata["icons"] = {
+  icon: [
+    { url: toAbsoluteUrl("/favicon.ico") },
+    { url: toAbsoluteUrl("/favicon.svg"), type: "image/svg+xml" },
+    {
+      url: toAbsoluteUrl("/favicon-96x96.png"),
+      sizes: "96x96",
+      type: "image/png",
+    },
+  ],
+  apple: [
+    {
+      url: toAbsoluteUrl("/apple-touch-icon.png"),
+      sizes: "180x180",
+      type: "image/png",
+    },
+  ],
 };
 
 export const buildPageMetadata = (pathname: string): Metadata => {
