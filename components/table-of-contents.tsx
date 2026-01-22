@@ -8,34 +8,92 @@ type TocProps = {
   items: TocItem[];
 };
 
+const useActiveToc = (items: TocItem[]) => {
+  const [activeId, setActiveId] = useState(items[0]?.id ?? "");
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    const headings = items
+      .map((item) => document.getElementById(item.id))
+      .filter((heading): heading is HTMLElement => Boolean(heading));
+
+    if (headings.length === 0) return;
+
+    let frame = 0;
+    const offset = 120;
+    const updateActive = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        const scrollPosition = window.scrollY + offset;
+        let currentId = headings[0].id;
+
+        for (const heading of headings) {
+          if (heading.offsetTop <= scrollPosition) {
+            currentId = heading.id;
+          } else {
+            break;
+          }
+        }
+        setActiveId(currentId);
+      });
+    };
+
+    updateActive();
+    window.addEventListener("scroll", updateActive, { passive: true });
+    window.addEventListener("resize", updateActive);
+
+    return () => {
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+      window.removeEventListener("scroll", updateActive);
+      window.removeEventListener("resize", updateActive);
+    };
+  }, [items]);
+
+  return activeId;
+};
+
 const TocList = ({
   items,
+  activeId,
   onNavigate,
 }: {
   items: TocItem[];
+  activeId?: string;
   onNavigate?: () => void;
 }) => {
   return (
     <ul className="space-y-2 text-sm">
-      {items.map((item) => (
-        <li
-          key={item.id}
-          className={cn(
-            "text-muted-foreground hover:text-foreground hover:font-semibold transition-colors",
-            item.level === 3 && "pl-3",
-            item.level === 4 && "pl-6",
-          )}
-        >
-          <a href={`#${item.id}`} onClick={onNavigate}>
-            {item.text}
-          </a>
-        </li>
-      ))}
+      {items.map((item) => {
+        const isActive = item.id === activeId;
+        return (
+          <li
+            key={item.id}
+            className={cn(
+              "text-muted-foreground hover:text-blue-600 hover:font-semibold transition-colors",
+              isActive && "text-foreground font-semibold",
+              item.level === 3 && "pl-3",
+              item.level === 4 && "pl-6",
+            )}
+          >
+            <a
+              href={`#${item.id}`}
+              onClick={onNavigate}
+              aria-current={isActive ? "true" : undefined}
+            >
+              {item.text}
+            </a>
+          </li>
+        );
+      })}
     </ul>
   );
 };
 
 export function TableOfContents({ items }: TocProps) {
+  const activeId = useActiveToc(items);
   if (items.length === 0) return null;
 
   return (
@@ -44,7 +102,7 @@ export function TableOfContents({ items }: TocProps) {
         On this page
       </p>
       <div className="mt-3">
-        <TocList items={items} />
+        <TocList items={items} activeId={activeId} />
       </div>
     </div>
   );
@@ -53,6 +111,7 @@ export function TableOfContents({ items }: TocProps) {
 export function MobileToc({ items }: TocProps) {
   const [open, setOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const activeId = useActiveToc(items);
 
   useEffect(() => {
     const handleHashChange = () => setOpen(false);
@@ -110,7 +169,11 @@ export function MobileToc({ items }: TocProps) {
               </button>
             </div>
             <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
-              <TocList items={items} onNavigate={() => setOpen(false)} />
+              <TocList
+                items={items}
+                activeId={activeId}
+                onNavigate={() => setOpen(false)}
+              />
             </div>
           </div>
         </div>
