@@ -18,6 +18,9 @@ export function Header() {
           <Link href="/search" className="hover:text-primary transition-colors">
             Search
           </Link>
+          <Link href="/about" className="hover:text-primary transition-colors">
+            About Me
+          </Link>
           <ThemeToggle />
         </nav>
       </div>
