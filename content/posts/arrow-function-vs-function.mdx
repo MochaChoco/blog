@@ -117,7 +117,7 @@ console.log(pow); // [ 1, 4, 9 ]
 일반적으로 JavaScript에서는 함수를 호출할 때 **어떻게 호출되었는지에 따라 `this` 바인딩이 동적으로 결정**됩니다. 하지만 **화살표 함수의 `this`는 항상 상위 스코프의 `this`를 그대로 캡처**합니다.
 따라서 `addEventListener`의 콜백으로 사용하더라도 별도로 바인딩된 요소를 가리키지 않을 수 있으며, `apply`/`call`/`bind`로 `this`를 바꾸는 것도 기대대로 동작하지 않습니다.
 
-##### ※ this 키워드에 관한 내용은 [이전 포스트](https://velog.io/@swj9077/this-%ED%82%A4%EC%9B%8C%EB%93%9C)에 정리해놓았으니 참고바랍니다.
+##### ※ this 키워드에 관한 내용은 [이전 포스트](https://mochachoco.github.io/blog/posts/this-binding-by-call)에 정리해놓았으니 참고바랍니다.
 
 ```javascript
 var firstName = "Kim";
