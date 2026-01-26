@@ -1,0 +1,267 @@
+---
+title: "웹 사이트를 PDF 인쇄에 맞게 최적화 해보기"
+description: "블로그를 PDF 인쇄 결과물에 맞게 구현하면서, 겪은 다양한 문제들을 해결 과정과 함께 정리했습니다."
+date: "2026-01-25"
+tags: ["css", "print"]
+slug: "html-print-css-troubleshooting"
+coverImage: "/images/posts/html-print-css-troubleshooting/cover.png"
+---
+
+![커버 이미지](/images/posts/html-print-css-troubleshooting/cover.png)
+
+웹 사이트 내용을 PDF로 저장하고 싶을 때가 있습니다. 이 블로그 또한 사용자의 인쇄 편의성 향상을 위해 인쇄 관련 디자인을 작업하기로 했습니다. 그런데 막상 해보니 생각보다 까다로운 문제들이 있었습니다.
+인쇄할때 굳이 노출될 필요없는 항목들은 숨김처리(헤더, 푸터 등)하고, 사용자 인터랙션이 불가능하므로 숨겨놨던 항목(링크)들은 다시 끄집어내는 작업이 필요했습니다. 오늘은 인쇄 기능 관련하여 코드를 개선하면서 겪었던 시행착오를 정리해볼까 합니다.
+
+## 목표
+
+- 헤더, 푸터, 목차 같은 UI 요소는 안 보이고 글 본문만 출력되게 하기
+- 다크 모드로 보고 있어도 인쇄할 땐 라이트 테마로 나오게 하기
+- 코드 블록은 구문 강조(syntax highlighting)가 유지되게 하기
+
+## 1. 인쇄할 때 안 보여야 할 것들 숨기기
+
+### 숨겨야 할 요소들
+
+블로그 페이지에는 본문 외에도 여러 요소가 있습니다. 헤더, 푸터, 목차, 공유 버튼, 이전/다음 글 네비게이션 등은 출력물에는 필요하지 않습니다. 오히려 이런 항목들은 문서에 쓸데없는 영역만 차지합니다.
+
+### @media print란?
+
+CSS에는 `@media print`라는 미디어 쿼리가 있습니다. 이 안에 작성한 스타일은 인쇄할 때만 적용됩니다. 브라우저에서 Cmd+P(또는 Ctrl+P)를 누르거나 "인쇄" 메뉴를 선택하면 이 스타일이 활성화됩니다.
+
+```css
+@media print {
+  /* 여기에 작성한 스타일은 인쇄할 때만 적용됩니다 */
+  .no-print {
+    display: none;
+  }
+}
+```
+
+이를 활용하면 화면에서는 보이지만 인쇄할 때는 숨기고 싶은 요소를 쉽게 제어할 수 있습니다.
+
+### Tailwind의 print:hidden 사용하기
+
+또한, Tailwind CSS 4에는 편의성을 위해 `print:` 클래스가 기본으로 들어 있습니다. 인쇄할 때 숨기고 싶은 컴포넌트에 `print:hidden`만 붙이면 됩니다.
+
+```tsx
+// header.tsx - 헤더 숨김
+export function Header() {
+  return <header className="border-b print:hidden">{/* ... */}</header>;
+}
+```
+
+```tsx
+// layout.tsx - 푸터 숨김
+<footer className="border-t py-6 text-center text-sm text-muted-foreground print:hidden">
+  {/* ... */}
+</footer>
+```
+
+같은 방식으로 숨겨야 할 컴포넌트들을 구분하여 모두 적용했습니다.
+
+<table>
+  <thead>
+    <tr>
+      <th>요소</th>
+      <th>기능</th>
+      <th>숨기는 이유</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>헤더</td>
+      <td>상단 네비게이션 바</td>
+      <td>페이지 이동 링크는 인쇄물에서 불필요합니다</td>
+    </tr>
+    <tr>
+      <td>푸터</td>
+      <td>하단 저작권 정보 영역</td>
+      <td>저작권 정보는 인쇄물에 굳이 포함하지 않아도 됩니다</td>
+    </tr>
+    <tr>
+      <td>목차</td>
+      <td>현재 글의 제목 목록 표시</td>
+      <td>화면에서 빠른 이동을 위한 기능이므로 인쇄물에서는 불필요합니다</td>
+    </tr>
+    <tr>
+      <td>모바일 목차</td>
+      <td>모바일에서 목차를 여는 버튼</td>
+      <td>인쇄물에서는 터치 인터랙션이 불가능합니다</td>
+    </tr>
+    <tr>
+      <td>공유 버튼</td>
+      <td>SNS 공유 링크 버튼들</td>
+      <td>인쇄물에서는 클릭할 수 없습니다</td>
+    </tr>
+    <tr>
+      <td>맨 위로 버튼</td>
+      <td>페이지 상단으로 스크롤하는 버튼</td>
+      <td>인쇄물에서는 스크롤 기능이 없습니다</td>
+    </tr>
+    <tr>
+      <td>글 네비게이션</td>
+      <td>이전/다음 글로 이동하는 링크</td>
+      <td>다른 글로 이동하는 기능은 인쇄물에서 불필요합니다</td>
+    </tr>
+    <tr>
+      <td>관련 글</td>
+      <td>연관된 다른 글 목록</td>
+      <td>다른 글로 이동하는 기능은 인쇄물에서 불필요합니다</td>
+    </tr>
+    <tr>
+      <td>태그</td>
+      <td>글에 달린 태그 목록</td>
+      <td>태그 클릭으로 필터링하는 기능은 인쇄물에서 불필요합니다</td>
+    </tr>
+  </tbody>
+</table>
+
+### 두 가지 방식을 같이 사용하는 이유
+
+1. **Tailwind `print:hidden`**: 컴포넌트마다 직접 붙여주므로 가독성이 높고, 의도가 명확합니다.
+2. **CSS `@media print`**: 그 외의 Tailwind에서 지원하지 않는 방식으로 숨김처리가 필요할때는 미디어 쿼리로 처리를 해야합니다.
+
+## 2. 다크 모드에서 인쇄했을때 문제
+
+이 블로그는 `next-themes`로 다크 모드를 지원합니다. 그런데 다크 모드에서 인쇄하면 어두운 배경에 밝은 글씨가 그대로 출력되어 읽기 불편한 점이 있었습니다.
+따라서 인쇄할때는 라이트 모드 CSS 변수를 강제로 적용했습니다.
+
+### 테마
+
+```css
+@media print {
+  :root,
+  .dark {
+    --background: 0 0% 100% !important;
+    --foreground: 222.2 84% 4.9% !important;
+    --card: 0 0% 100% !important;
+    --card-foreground: 222.2 84% 4.9% !important;
+    /* ... 나머지 변수들 */
+  }
+
+  html,
+  body {
+    background: white !important;
+    background-color: white !important;
+    color: black !important;
+    color-scheme: light !important;
+  }
+
+  .dark {
+    background: white !important;
+    background-color: white !important;
+    color: black !important;
+  }
+}
+```
+
+### 본문 텍스트
+
+`.prose` 안에 있는 제목이나 본문 텍스트도 검은색으로 바꿔줘야 합니다. 이때 코드 블록(`pre`, `figure`)은 제외해야 합니다. 코드 블록까지 `color: black`이 적용되면 shiki의 구문 강조 색상이 덮어씌워져 버립니다.
+
+```css
+@media print {
+  /* 코드 블록을 제외한 본문 텍스트만 검은색 */
+  .prose > :not(figure):not(pre),
+  .dark .prose > :not(figure):not(pre) {
+    color: black !important;
+  }
+
+  .prose > p,
+  .prose > ul > li,
+  .prose > ol > li,
+  .prose strong {
+    color: black !important;
+  }
+}
+```
+
+직계 자식 선택자(`>`)와 `:not()` 선택자를 조합해서 코드 블록 안쪽까지 스타일이 전파되지 않도록 처리했습니다.
+
+## 3. 코드 블록 스타일링
+
+이 블로그는 `rehype-pretty-code`와 `shiki`로 코드 하이라이팅을 적용합니다. shiki는 각 토큰에 인라인 `style` 속성으로 색상을 지정하기 때문에, 위에서 설명한 것처럼 본문 스타일이 코드 블록에 영향을 주지 않도록만 하면 구문 강조가 그대로 유지됩니다.
+코드 블록에 추가로 필요한 처리는 인쇄할 때 긴 코드가 잘리지 않도록 줄바꿈을 적용하는 것입니다.
+
+```css
+@media print {
+  pre,
+  .prose pre,
+  .dark .prose pre {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    border: 1px solid #ccc !important;
+    padding: 1rem !important;
+  }
+
+  pre code > span {
+    display: block !important;
+  }
+}
+```
+
+이렇게 하면 코드 블록이 화면에서 보는 것과 동일하게 인쇄됩니다.
+
+## 4. 기타 인쇄 최적화
+
+### 레이아웃 및 페이지 나눔
+
+웹에서 설정된 여백이나 최대 너비를 제거해서 용지를 최대한 활용하고, 이미지나 제목이 페이지 경계에서 어색하게 잘리지 않도록 처리했습니다.
+
+```css
+@media print {
+  html,
+  body {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* 이미지가 페이지 중간에서 잘리지 않도록 */
+  .prose img {
+    break-inside: avoid;
+    max-width: 100% !important;
+  }
+
+  /* 제목 바로 다음에 페이지가 넘어가지 않도록 */
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4 {
+    break-after: avoid;
+  }
+}
+```
+
+### 링크 URL 보여주기
+
+인쇄물에서는 링크를 클릭할 수 없으므로 URL을 텍스트로 보여주는 것이 좋습니다.
+
+```css
+@media print {
+  .prose a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.75em;
+    color: #666 !important;
+    word-break: break-all;
+  }
+}
+```
+
+## 배운 점들
+
+인쇄 스타일 작업은 생각보다 신경 쓸 게 많았습니다. 단순히 `display: none`만 붙이면 될 줄 알았는데, 다크 모드 대응이나 코드 블록 색상 유지, 링크 URL 표시까지 고려해야 했습니다. 그래도 이러한 개선사항들 덕분에 이제 블로그 글을 PDF로 저장할 때 불필요한 요소 없이 본문만 깔끔하게 출력되게 되었습니다.
+
+## 참고 자료
+
+- [MDN - @media print](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media#print)
+- [MDN - print-color-adjust](https://developer.mozilla.org/en-US/docs/Web/CSS/print-color-adjust)
+- [Tailwind CSS - Print Styles](https://tailwindcss.com/docs/hover-focus-and-other-states#print)
+- [rehype-pretty-code](https://rehype-pretty.pages.dev/)
