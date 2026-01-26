@@ -330,10 +330,27 @@ html {
   pre,
   .prose pre,
   .dark .prose pre {
-    white-space: pre-wrap !important;
-    word-wrap: break-word !important;
+    overflow-x: visible !important;
+    overflow: visible !important;
     border: 1px solid #ccc !important;
     padding: 1rem !important;
+  }
+
+  pre code,
+  .prose pre code,
+  .prose pre > code,
+  .dark .prose pre code,
+  .dark .prose pre > code {
+    white-space: pre-wrap !important;
+    overflow-wrap: break-word !important;
+  }
+
+  /* 코드 라인이 길 때만 줄바꿈 */
+  pre code > span,
+  .prose pre code > span,
+  .dark .prose pre code > span {
+    white-space: pre-wrap !important;
+    overflow-wrap: break-word !important;
   }
 
   /* 코드 블록 wrapper */
@@ -342,10 +359,6 @@ html {
     background: transparent !important;
   }
 
-  /* 코드 라인 표시 */
-  pre code > span {
-    display: block !important;
-  }
 
   /* 인라인 코드 인쇄 최적화 */
   .prose :not(pre) > code,
