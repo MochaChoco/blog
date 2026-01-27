@@ -10,7 +10,7 @@ coverImage: "/images/posts/html-print-css-troubleshooting/cover.png"
 ![커버 이미지](/images/posts/html-print-css-troubleshooting/cover.png)
 
 웹 사이트 내용을 PDF로 저장하고 싶을 때가 있습니다. 이 블로그 또한 사용자의 인쇄 편의성 향상을 위해 인쇄 관련 디자인을 작업하기로 했습니다. 그런데 막상 해보니 생각보다 까다로운 문제들이 있었습니다.
-인쇄할때 굳이 노출될 필요없는 항목들은 숨김처리(헤더, 푸터 등)하고, 사용자 인터랙션이 불가능하므로 숨겨놨던 항목(링크)들은 다시 끄집어내는 작업이 필요했습니다. 오늘은 인쇄 기능 관련하여 코드를 개선하면서 겪었던 시행착오를 정리해볼까 합니다.
+헤더나 푸터 같은 불필요한 요소는 숨기고, 테마 컬러를 보기 편한 색상으로 바꾸고, 사이트의 여백을 인쇄에 적합하게 변경하는 등 여러 작업이 필요했습니다. 이번 글에서는 그 과정에서 겪은 시행착오를 정리해봤습니다.
 
 ## 목표
 
@@ -24,13 +24,11 @@ coverImage: "/images/posts/html-print-css-troubleshooting/cover.png"
 
 블로그 페이지에는 본문 외에도 여러 요소가 있습니다. 헤더, 푸터, 목차, 공유 버튼, 이전/다음 글 네비게이션 등은 출력물에는 필요하지 않습니다. 오히려 이런 항목들은 문서에 쓸데없는 영역만 차지합니다.
 
-
 <img
   src="/images/posts/html-print-css-troubleshooting/image1.png"
   style={{ maxWidth: "520px" }}
   alt="이미지1"
 />
-
 
 ### @media print란?
 
