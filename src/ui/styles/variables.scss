@@ -1,0 +1,63 @@
+// =============================================
+// CSS Variables (커스터마이징 가능)
+// =============================================
+
+:root {
+  // Colors - Light Theme
+  --cb-color-primary: #2563eb;
+  --cb-color-primary-hover: #1d4ed8;
+  --cb-color-danger: #dc2626;
+  --cb-color-danger-hover: #b91c1c;
+
+  --cb-color-bg: #ffffff;
+  --cb-color-bg-secondary: #f9fafb;
+  --cb-color-bg-hover: #f3f4f6;
+
+  --cb-color-text: #111827;
+  --cb-color-text-secondary: #6b7280;
+  --cb-color-text-muted: #9ca3af;
+
+  --cb-color-border: #e5e7eb;
+  --cb-color-border-focus: #2563eb;
+
+  // Typography
+  --cb-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --cb-font-size-base: 14px;
+  --cb-font-size-sm: 12px;
+  --cb-font-size-lg: 16px;
+  --cb-line-height: 1.5;
+
+  // Spacing
+  --cb-spacing-xs: 4px;
+  --cb-spacing-sm: 8px;
+  --cb-spacing-md: 12px;
+  --cb-spacing-lg: 16px;
+  --cb-spacing-xl: 24px;
+
+  // Border Radius
+  --cb-radius-sm: 4px;
+  --cb-radius-md: 8px;
+  --cb-radius-full: 9999px;
+
+  // Avatar
+  --cb-avatar-size: 40px;
+  --cb-avatar-size-sm: 32px;
+
+  // Transitions
+  --cb-transition-fast: 150ms ease;
+  --cb-transition-normal: 200ms ease;
+}
+
+// Dark Theme
+.cb-container--dark {
+  --cb-color-bg: #1f2937;
+  --cb-color-bg-secondary: #374151;
+  --cb-color-bg-hover: #4b5563;
+
+  --cb-color-text: #f9fafb;
+  --cb-color-text-secondary: #d1d5db;
+  --cb-color-text-muted: #9ca3af;
+
+  --cb-color-border: #4b5563;
+}
