@@ -535,6 +535,12 @@ export class CommentBoxInstance {
 
   private showReplyEditor(parentId: string): void {
     const { cssPrefix, messages, sticker } = this.options;
+
+    // 수정 중인 댓글이 있으면 먼저 취소
+    if (this.state.editingComment) {
+      this.cancelEdit(this.state.editingComment);
+    }
+
     const wrapper = this.container.querySelector(
       `.${cssPrefix}-reply-editor-wrapper[data-parent-id="${parentId}"]`
     ) as HTMLElement;
@@ -645,6 +651,11 @@ export class CommentBoxInstance {
     // 이미 수정 중인 댓글이 있으면 먼저 취소
     if (this.state.editingComment) {
       this.cancelEdit(this.state.editingComment);
+    }
+
+    // 열려있는 답글 에디터가 있으면 닫기
+    for (const parentId of this.state.replyEditors) {
+      this.hideReplyEditor(parentId);
     }
 
     // 댓글 DOM 요소 탐색
