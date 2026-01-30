@@ -1,5 +1,5 @@
 {
-  "name": "@nom/comment-box",
+  "name": "@ogqcorp/comment-box",
   "version": "0.1.0",
   "description": "Framework-agnostic comment module for web applications",
   "type": "module",
@@ -62,5 +62,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/ogqcorp/ogq-comment-box.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   }
 }
