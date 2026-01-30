@@ -52,7 +52,9 @@ export interface Messages {
   showReplies: string;
   hideReplies: string;
   manager: string;
-  today: string;
+  justNow: string;
+  minutesAgo: string;
+  hoursAgo: string;
   daysAgo: string;
   monthsAgo: string;
   yearsAgo: string;

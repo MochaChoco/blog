@@ -24,8 +24,12 @@ export function timeAgo(timestamp: number, messages: Messages): string {
     return formatMessage(messages.monthsAgo, { months: diffMonths });
   } else if (diffDays > 0) {
     return formatMessage(messages.daysAgo, { days: diffDays });
+  } else if (diffHours > 0) {
+    return formatMessage(messages.hoursAgo, { hours: diffHours });
+  } else if (diffMinutes > 0) {
+    return formatMessage(messages.minutesAgo, { minutes: diffMinutes });
   } else {
-    return messages.today;
+    return messages.justNow;
   }
 }
 
