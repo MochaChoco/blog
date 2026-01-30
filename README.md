@@ -18,8 +18,14 @@
 ## 설치
 
 ```bash
-npm install @nom/comment-box
+npm install @ogqcorp/comment-box
 ```
+
+> GitHub Packages를 사용하므로 `~/.npmrc` 또는 프로젝트 `.npmrc`에 다음 설정이 필요합니다:
+> ```
+> //npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
+> @ogqcorp:registry=https://npm.pkg.github.com
+> ```
 
 ## 사용법
 
@@ -29,8 +35,8 @@ npm install @nom/comment-box
 <div id="comment-box"></div>
 
 <script type="module">
-  import CommentBox from '@nom/comment-box';
-  import '@nom/comment-box/style.css';
+  import CommentBox from '@ogqcorp/comment-box';
+  import '@ogqcorp/comment-box/style.css';
 
   CommentBox.init({
     container: '#comment-box',
@@ -62,8 +68,8 @@ npm install @nom/comment-box
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import CommentBox from '@nom/comment-box';
-import '@nom/comment-box/style.css';
+import CommentBox from '@ogqcorp/comment-box';
+import '@ogqcorp/comment-box/style.css';
 
 const commentBox = ref(null);
 
@@ -493,7 +499,7 @@ private renderList(): void {
 `HttpAPI`는 `CommentAPI` 인터페이스를 `fetch()`로 구현한 HTTP 클라이언트입니다.
 
 ```typescript
-import CommentBox, { HttpAPI } from '@nom/comment-box';
+import CommentBox, { HttpAPI } from '@ogqcorp/comment-box';
 
 CommentBox.init({
   container: '#comment-box',
@@ -541,10 +547,10 @@ nom-market-front/src/server/
 let CommentBox = null;
 let HttpAPI = null;
 if (import.meta.client) {
-  const mod = await import('@nom/comment-box');
+  const mod = await import('@ogqcorp/comment-box');
   CommentBox = mod.default || mod.CommentBox;
   HttpAPI = mod.HttpAPI;
-  await import('@nom/comment-box/style.css');
+  await import('@ogqcorp/comment-box/style.css');
 }
 
 function initCommentBox() {
@@ -575,8 +581,8 @@ interface CommentAPI {
 ```
 
 ```typescript
-import CommentBox from '@nom/comment-box';
-import type { CommentAPI } from '@nom/comment-box';
+import CommentBox from '@ogqcorp/comment-box';
+import type { CommentAPI } from '@ogqcorp/comment-box';
 
 class MyCustomAPI implements CommentAPI {
   // ... 인터페이스 메서드 구현
@@ -610,14 +616,35 @@ npm test
 npm run typecheck
 ```
 
+### 배포 (GitHub Packages)
+
+```bash
+# 버전 올리기
+npm version patch   # 0.1.0 → 0.1.1
+npm version minor   # 0.1.0 → 0.2.0
+npm version major   # 0.1.0 → 1.0.0
+
+# GitHub Packages에 배포 (빌드 자동 실행)
+npm publish
+
+# 소비자 프로젝트에서 설치
+npm install @ogqcorp/comment-box
+```
+
+> `~/.npmrc`에 GitHub Packages 인증 설정이 필요합니다:
+> ```
+> //npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
+> @ogqcorp:registry=https://npm.pkg.github.com
+> ```
+
 ### npm link로 로컬 개발
 
 ```bash
 # ogq-comment-box 폴더에서
 npm link
 
-# nom-market-front 폴더에서
-npm link @nom/comment-box
+# 소비자 프로젝트 폴더에서
+npm link @ogqcorp/comment-box
 ```
 
 ---

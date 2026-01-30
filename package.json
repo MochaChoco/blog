@@ -30,6 +30,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@ogqcorp/comment-box": "^0.1.0",
     "dompurify": "^3.0.0"
   },
   "devDependencies": {
@@ -57,7 +58,7 @@
     "ogq",
     "naver"
   ],
-  "author": "OGQ Market Team",
+  "author": "소원진",
   "license": "MIT",
   "repository": {
     "type": "git",
