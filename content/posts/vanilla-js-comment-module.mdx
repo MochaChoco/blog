@@ -1,51 +1,45 @@
 ---
-title: "네이버 댓글 종료 대응, Vanilla JS 댓글 모듈 자체 개발기"
-description: "네이버 공통 댓글 모듈 종료에 대응하여, 프레임워크 독립적인 Vanilla JS 댓글 모듈을 설계·개발하고 Nuxt 3 프로젝트에 통합한 과정을 공유합니다."
+title: "A사 댓글 종료 대응, Vanilla JS 댓글 모듈 자체 개발기"
+description: "A사 댓글 모듈 종료에 대응하여, 프레임워크 독립적인 Vanilla JS 댓글 모듈을 설계·개발하고 Nuxt 3 프로젝트에 통합한 과정을 공유합니다."
 date: "2026-01-30"
 tags: ["javascript", "architecture"]
 slug: "vanilla-js-comment-module"
 ---
 
-안녕하세요. 이번 글에서는 네이버 공통 댓글 모듈 종료에 대응하여 프레임워크 독립적인 Vanilla JS 댓글 모듈을 자체 개발하고, 기존 Nuxt 3 프로젝트에 통합한 과정을 공유합니다.
+안녕하세요. 이번 포스트에서는 A사의 댓글 모듈 지원 종료에 대응하여 사내에서 사용할 댓글 모듈을 개발하고, 그것을 현재 서비스 중인 프로젝트와 통합한 과정을 공유하고자 합니다.
 
-## 배경: 네이버 공통 댓글 모듈 종료
+## 배경: A사 댓글 모듈 종료
 
-저희 서비스는 크리에이터 공지사항, 이벤트 상세, 웹툰 이벤트 등 총 3개 페이지에서 네이버 공통 댓글 모듈을 사용하고 있었습니다. 네이버 댓글 모듈은 외부 스크립트를 동적 로드하는 방식으로 동작했습니다.
-
-```javascript
-const commentBoxLoader = function (htOption) {
-  window.__htCboxOption = htOption;
-  const s = document.createElement('script');
-  s.src = `${htOption.sDomain}/js/cbox.core.js?v=${Math.floor(
-    new Date().getTime() / 1200000
-  )}`;
-  document.head.appendChild(s);
-};
-
-commentBoxLoader({
-  sDomain: 'https://ssl.pstatic.net/static.cbox',
-  sApiDomain: 'https://apis.naver.com/commentBox/cbox6',
-  sTicket: $env.sTicket,
-  sObjectId: sObjectId,
-  bManager: props.connectedCreator,
-  aFormation: ['count', 'write', 'list', 'page', 'view'],
-  // ...
-});
-```
-
-네이버 CDN에서 스크립트를 가져오고, 네이버 API 서버와 통신하며, CSS 스킨까지 네이버 쪽 리소스에 의존하는 구조였습니다. 이 모듈의 서비스가 종료된다는 것은 댓글 기능 전체가 사라진다는 의미였기에, 자체 댓글 모듈 개발이 필요했습니다.
+저희 서비스는 공지사항 상세, 이벤트 상세, 프로모션 페이지 등 총 3개 페이지에서 A사 댓글 모듈을 사용하고 있었습니다. A사 댓글 모듈은 전역 객체에 옵션을 설정한 뒤 외부 CDN에서 스크립트를 동적 로드하는 방식으로 동작했습니다. 스크립트, API 서버, CSS까지 모두 A사 쪽 리소스에 의존하는 구조였습니다. 이 모듈의 서비스가 종료된다는 것은 댓글 기능 전체가 사라진다는 의미였기에, 자체 댓글 모듈 개발이 필요했습니다.
 
 ## 현황 분석: 무엇을 만들어야 하는가
 
-자체 모듈을 개발하기에 앞서, 먼저 기존 네이버 댓글 모듈이 서비스에서 어떻게 사용되고 있는지 분석했습니다.
+자체 모듈을 개발하기에 앞서, 먼저 기존 A사 댓글 모듈이 서비스에서 어떻게 사용되고 있는지 분석했습니다.
 
-| 사용처 | 파일 경로 | 특이사항 |
-|--------|-----------|----------|
-| 크리에이터 공지사항 | `CreatorNoticeDetails.vue` | `bManager` 옵션으로 작성자 표시 |
-| 이벤트 상세 | `events/[eventId].vue` | `allowedComment` 플래그 |
-| 웹툰 이벤트 | `events/manual/webtoon.vue` | 수동 이벤트 페이지 |
+<table>
+  <thead>
+    <tr>
+      <th>사용처</th>
+      <th>특이사항</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>공지사항 상세</td>
+      <td><code>bManager</code> 옵션으로 작성자 표시</td>
+    </tr>
+    <tr>
+      <td>이벤트 상세</td>
+      <td><code>allowedComment</code> 플래그</td>
+    </tr>
+    <tr>
+      <td>프로모션 페이지</td>
+      <td>특이사항 없음</td>
+    </tr>
+  </tbody>
+</table>
 
-세 곳 모두 댓글 목록 조회, 작성, 수정, 삭제, 페이지네이션이라는 기본 기능을 사용하고 있었고, 크리에이터 공지사항에서는 추가로 작성자 뱃지 표시(`bManager`)와 모바일/데스크톱 CSS 분기가 필요했습니다.
+세 곳 모두 댓글 목록 조회, 작성, 수정, 삭제, 페이지네이션이라는 기본 기능을 사용하고 있었고, 공지사항 상세에서는 추가로 작성자 뱃지 표시(`bManager`)와 모바일/데스크톱 CSS 분기가 필요했습니다.
 
 이 분석을 토대로 자체 모듈에 필요한 기능 목록을 정리했습니다.
 
@@ -59,7 +53,7 @@ commentBoxLoader({
 
 ### 현실적 제약
 
-저희 서비스는 현재 Nuxt 3(Vue 3) 기반이지만, 같은 조직 내에 React 기반 프로젝트도 존재합니다. Vue 컴포넌트로 만들면 React 프로젝트에서 사용할 수 없고, 반대도 마찬가지입니다. 기존 네이버 댓글 모듈이 프레임워크에 관계없이 어디서든 동작했던 것처럼, 자체 모듈도 동일한 범용성을 가져야 했습니다.
+저희 서비스는 현재 Nuxt 3(Vue 3) 기반이지만, 같은 조직 내에 React 기반, 심지어 PHP로 만들어진 프로젝트도 존재했습니다. Vue 컴포넌트로 만들면 React 프로젝트에서 사용할 수 없고, 반대도 마찬가지입니다. 기존 A사 댓글 모듈이 프레임워크에 관계없이 어디서든 동작했던 것처럼, 자체 모듈도 동일한 범용성을 가져야 했습니다.
 
 ### Vanilla JS를 선택한 이유
 
@@ -89,20 +83,20 @@ useEffect(() => {
 
 프레임워크 기반 컴포넌트는 해당 프레임워크를 런타임 의존성으로 가져가야 합니다. 반면 Vanilla JS 모듈의 프로덕션 의존성은 XSS 방지를 위한 DOMPurify 단 하나뿐입니다. 번들 크기가 작고, 소비자 프로젝트의 프레임워크 버전 업그레이드에도 영향을 받지 않습니다.
 
-**3. 기존 네이버 모듈과 동일한 통합 방식**
+**3. 기존 A사 모듈과 동일한 통합 방식**
 
-네이버 댓글 모듈은 전역 객체(`window.__htCboxOption`)에 옵션을 설정하고 스크립트를 로드하는 방식이었습니다. 자체 모듈도 비슷한 패턴(`CommentBox.init(options)`)을 유지하면 기존 통합 코드의 변경을 최소화할 수 있었습니다.
+A사 댓글 모듈은 전역 객체(`window.__htCboxOption`)에 옵션을 설정하고 스크립트를 로드하는 방식이었습니다. 자체 모듈도 비슷한 패턴(`CommentBox.init(options)`)을 유지하면 기존 통합 코드의 변경을 최소화할 수 있었습니다.
 
 ### 대신 감수해야 하는 것
 
-Vanilla JS를 선택하면서 프레임워크가 제공하는 반응형 상태 관리, 가상 DOM, 선언적 UI 등의 편의를 포기해야 했습니다. 이를 보완하기 위해 직접 상태 관리 로직을 구현하고, 이벤트 위임 패턴으로 DOM 이벤트를 효율적으로 처리하며, 템플릿 리터럴로 UI를 구성하는 전략을 택했습니다. 이 부분은 아래 아키텍처 절에서 자세히 다루겠습니다.
+Vanilla JS를 선택하면서 프레임워크가 제공하는 반응형 상태 관리, 가상 DOM, 선언적 UI 등의 편의를 포기해야 했습니다. 이를 보완하기 위해 직접 상태 관리 로직을 구현하고, 이벤트 위임 패턴으로 DOM 이벤트를 효율적으로 처리하며, 템플릿 리터럴로 UI를 구성하는 전략을 택했습니다. 이 과정에서 겪은 구체적인 문제들은 아키텍처 설계 이후 "[프레임워크 없이 UI 만들기](#프레임워크-없이-ui-만들기)" 절에서 다루겠습니다.
 
 ## 아키텍처 설계
 
 ### 프로젝트 구조
 
 ```
-ogq-comment-box/
+comment-box/
 ├── src/
 │   ├── core/                    # 핵심 로직
 │   │   ├── CommentBox.ts        # 싱글톤 매니저
@@ -126,79 +120,42 @@ ogq-comment-box/
 └── examples/                    # 데모
 ```
 
-### 핵심 설계 패턴
+### 싱글톤 매니저와 인스턴스
 
-#### 1. 싱글톤 매니저 패턴
-
-한 페이지에 여러 댓글 영역이 존재할 수 있으므로, 인스턴스를 중앙에서 관리하는 매니저가 필요했습니다.
+한 페이지에 여러 댓글 영역이 존재할 수 있습니다. 공지사항 상세 페이지에는 본문 아래 댓글이 하나지만, 프로모션 페이지에서는 여러 섹션에 각각 댓글을 붙여야 할 수도 있습니다. 이를 위해 **매니저(`CommentBox`) → 인스턴스(`CommentBoxInstance`)** 구조를 택했습니다.
 
 ```typescript
 class CommentBoxManager {
-  private instances: Map<string, CommentBoxInstance> = new Map();
+  private instances = new Map<string, CommentBoxInstance>();
 
   init(options: CommentBoxOptions): CommentBoxInstance {
-    const key = resolveContainerKey(options.container);
+    const normalized = this.normalizeOptions(options);
+    const key = this.getContainerKey(normalized.container);
 
-    // 같은 컨테이너에 재초기화 시 기존 인스턴스 정리
+    // 같은 컨테이너에 이미 인스턴스가 있으면 먼저 정리
     if (this.instances.has(key)) {
       this.instances.get(key)!.destroy();
     }
 
-    const instance = new CommentBoxInstance(this.normalizeOptions(options));
+    const instance = new CommentBoxInstance(normalized);
     this.instances.set(key, instance);
     return instance;
   }
 
   destroy(container: string | HTMLElement): void { /* ... */ }
-  destroyAll(): void { /* ... */ }
+  destroyAll(): void { /* 모든 인스턴스 일괄 정리 */ }
   getInstance(container: string | HTMLElement): CommentBoxInstance | undefined { /* ... */ }
 }
 
-// 싱글톤 export
-const CommentBox = new CommentBoxManager();
-export default CommentBox;
+// 전역 싱글톤으로 export
+export const CommentBox = new CommentBoxManager();
 ```
 
-`CommentBox.init()`으로 생성하고, `CommentBox.destroy()`로 정리하는 단순한 인터페이스를 외부에 노출합니다. 내부적으로는 `Map`으로 인스턴스를 추적하며, 같은 컨테이너에 중복 초기화되면 기존 인스턴스를 자동 정리합니다.
+`CommentBox`는 싱글톤으로 인스턴스의 생성·조회·소멸을 관리합니다. 각 컨테이너에는 `data-cb-id` 속성으로 고유 키를 부여하여, 같은 컨테이너에 중복 초기화가 발생하면 기존 인스턴스를 먼저 정리합니다. SPA에서 페이지 전환 시 이전 인스턴스가 남아 메모리 누수가 발생하는 것을 방지하기 위한 설계입니다.
 
-#### 2. 이벤트 위임
+실제 댓글 기능의 모든 로직은 `CommentBoxInstance`에 집중되어 있습니다. 프레임워크 없이 상태 관리, 렌더링, 이벤트 처리, 리소스 정리를 모두 담당하는 핵심 모듈입니다.
 
-프레임워크 없이 동적 DOM을 다룰 때 가장 중요한 패턴입니다. 댓글 목록은 페이지네이션, 답글 펼침 등으로 동적으로 변하는데, 개별 요소에 리스너를 붙이면 메모리 누수와 관리 복잡성이 생깁니다.
-
-```typescript
-function delegate<T extends HTMLElement>(
-  container: HTMLElement,
-  selector: string,
-  eventType: string,
-  handler: (event: Event, target: T) => void
-): () => void {
-  const listener = (event: Event) => {
-    const target = (event.target as Element).closest(selector) as T | null;
-    if (target && container.contains(target)) {
-      handler(event, target);
-    }
-  };
-  container.addEventListener(eventType, listener);
-  return () => container.removeEventListener(eventType, listener); // cleanup 함수 반환
-}
-```
-
-컨테이너 하나에 이벤트 리스너를 등록하고, 이벤트 버블링을 활용해 하위 요소의 이벤트를 감지합니다. 반환된 cleanup 함수는 인스턴스 소멸 시 호출하여 메모리 누수를 방지합니다.
-
-실제 사용 예시는 다음과 같습니다.
-
-```typescript
-// 등록 버튼 클릭 - 동적으로 생성되는 버튼도 감지
-const cleanupSubmit = delegate(
-  this.container,
-  '.cb-editor-submit',
-  'click',
-  (_, target) => this.handleEditorSubmit(target.closest('.cb-editor')!)
-);
-this.cleanupFunctions.push(cleanupSubmit);
-```
-
-#### 3. API 추상화 (Strategy 패턴)
+### API 추상화 (Strategy 패턴)
 
 백엔드 API가 아직 준비되지 않은 상태에서 프론트엔드 개발을 진행해야 했기 때문에, API 레이어를 인터페이스로 추상화했습니다.
 
@@ -223,74 +180,24 @@ interface CommentAPI {
 ```typescript
 // 개발 시 - Mock API (기본값)
 CommentBox.init({
-  container: '#comment-box',
-  objectId: 'article-123',
+  container: "#comment-box",
+  objectId: "article-123",
 });
 
 // 서버 연동 시 - HTTP API
-import { HttpAPI } from '@ogqcorp/comment-box';
+import { HttpAPI } from "@my-org/comment-box";
 CommentBox.init({
-  container: '#comment-box',
-  objectId: 'article-123',
-  api: new HttpAPI('/api/comments'),
+  container: "#comment-box",
+  objectId: "article-123",
+  api: new HttpAPI("/api/comments"),
 });
 ```
 
 소비자 코드에서 API 구현체만 교체하면 동작이 전환됩니다. 이 덕분에 백엔드 개발과 프론트엔드 개발을 완전히 병렬로 진행할 수 있었습니다.
 
-#### 4. 템플릿 리터럴 기반 렌더링
+### CSS 변수 기반 테마
 
-가상 DOM 없이 UI를 구성하기 위해 템플릿 리터럴 함수를 사용했습니다.
-
-```typescript
-export function commentItemTemplate(
-  prefix: string,
-  comment: Comment,
-  messages: Messages,
-  options: { isOwner: boolean; showManagerBadge: boolean }
-): string {
-  return `
-    <div class="${prefix}-comment-item" data-comment-id="${escapeAttr(comment.id)}">
-      <div class="${prefix}-comment-body">
-        <div class="${prefix}-comment-header">
-          <span class="${prefix}-author">${sanitize(comment.author.nickname)}</span>
-          <span class="${prefix}-time">${formatRelativeTime(comment.createdAt)}</span>
-        </div>
-        <div class="${prefix}-comment-content"
-             data-raw-content="${escapeAttr(comment.content)}">
-          ${processContent(comment.content)}
-        </div>
-      </div>
-    </div>
-  `;
-}
-```
-
-사용자 입력 값에는 반드시 `sanitize()`(DOMPurify)와 `escapeAttr()`을 적용하여 XSS를 방지했습니다. 템플릿 리터럴은 JSX나 가상 DOM 대비 빌드 과정이 단순하고, 순수 문자열이므로 `innerHTML`로 바로 삽입할 수 있다는 장점이 있습니다.
-
-좋아요 버튼처럼 빈번한 업데이트가 필요한 부분은 전체 목록을 다시 렌더링하지 않고 해당 요소만 부분 업데이트하는 방식을 적용했습니다.
-
-```typescript
-private async toggleLike(commentId: string, buttonEl: HTMLElement): Promise<void> {
-  const updated = isLiked
-    ? await this.api.unlikeComment(commentId)
-    : await this.api.likeComment(commentId);
-
-  // 전체 리렌더링 대신 해당 버튼 요소만 업데이트
-  const iconEl = buttonEl.querySelector(`.${prefix}-like-icon`);
-  if (iconEl) {
-    iconEl.innerHTML = updated.isLiked ? '&#9829;' : '&#9825;';
-  }
-  const countEl = buttonEl.querySelector(`.${prefix}-like-count`);
-  if (countEl) {
-    countEl.textContent = updated.likeCount > 0 ? String(updated.likeCount) : '';
-  }
-}
-```
-
-#### 5. CSS 변수 기반 테마
-
-소비자 프로젝트마다 디자인 시스템이 다르므로, CSS 변수를 통해 스타일을 재정의할 수 있도록 설계했습니다.
+소비자 프로젝트마다 디자인 시스템이 다르므로, CSS 변수를 통해 스타일을 오버라이딩할 수 있도록 설계했습니다.
 
 ```scss
 :root {
@@ -298,7 +205,7 @@ private async toggleLike(commentId: string, buttonEl: HTMLElement): Promise<void
   --cb-color-bg: #ffffff;
   --cb-color-text: #111827;
   --cb-color-border: #e5e7eb;
-  --cb-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --cb-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --cb-radius-sm: 4px;
   --cb-radius-md: 8px;
 }
@@ -311,16 +218,286 @@ private async toggleLike(commentId: string, buttonEl: HTMLElement): Promise<void
 }
 ```
 
-소비자 프로젝트에서는 CSS 변수만 덮어쓰면 됩니다. 실제로 Nuxt 프로젝트에 통합할 때 아래와 같이 디자인 시스템에 맞게 오버라이딩했습니다.
+소비자 프로젝트에서는 CSS 변수만 덮어쓰면 됩니다. 실제로 Nuxt 프로젝트에 통합할 때 아래와 같이 서비스 디자인 시스템에 맞게 오버라이딩했습니다.
 
 ```scss
-// nom-market-front/src/assets/scss/_comment-box.scss
+// src/assets/scss/_comment-box.scss
 :root {
-  --cb-color-primary: #00c389;
-  --cb-color-primary-hover: #14a57a;
-  --cb-font-family: 'Pretendard', 'Noto Sans KR', -apple-system, sans-serif;
+  --cb-color-primary: #0d9488;
+  --cb-color-primary-hover: #0f766e;
+  --cb-font-family: "Pretendard Variable", -apple-system, sans-serif;
   --cb-radius-md: 12px;
 }
+```
+
+## 프레임워크 없이 UI 만들기
+
+앞서 Vanilla JS를 선택하면서 감수해야 한다고 언급했던 것들—상태 관리, 이벤트 처리, DOM 렌더링—을 `CommentBoxInstance`에서 직접 구현해야 했습니다. 여기서는 그 과정에서 겪은 문제와 해결 방식을 다룹니다.
+
+### 이벤트 위임: 동적 DOM의 기반
+
+프레임워크 없이 동적 DOM을 다룰 때 가장 먼저 해결해야 할 문제는 이벤트 처리입니다. 댓글 목록은 페이지네이션, 답글 펼침 등으로 끊임없이 변하는데, 개별 요소에 리스너를 붙이면 메모리 누수와 관리 복잡성이 생깁니다.
+
+```typescript
+function delegate<T extends HTMLElement>(
+  container: HTMLElement,
+  selector: string,
+  eventType: string,
+  handler: (event: Event, target: T) => void,
+): () => void {
+  const listener = (event: Event) => {
+    const target = (event.target as Element).closest(selector) as T | null;
+    if (target && container.contains(target)) {
+      handler(event, target);
+    }
+  };
+  container.addEventListener(eventType, listener);
+  return () => container.removeEventListener(eventType, listener); // cleanup 함수 반환
+}
+```
+
+컨테이너 하나에 이벤트 리스너를 등록하고, 이벤트 버블링을 활용해 하위 요소의 이벤트를 감지합니다. 반환된 cleanup 함수는 배열에 저장했다가 인스턴스 소멸 시 일괄 호출하여 메모리 누수를 방지합니다.
+
+```typescript
+private cleanupFunctions: (() => void)[] = [];
+
+// 등록
+const cleanupSubmit = delegate(this.container, ".cb-editor-submit", "click", ...);
+this.cleanupFunctions.push(cleanupSubmit);
+
+// 소멸 시 일괄 정리
+destroy(): void {
+  this.cleanupFunctions.forEach((cleanup) => cleanup());
+  this.cleanupFunctions = [];
+  this.emitter.removeAllListeners();
+  empty(this.container);
+}
+```
+
+이 이벤트 위임 인프라 위에서 상태 관리, 렌더링, 에디터 처리 등 모든 인터랙션이 동작합니다.
+
+### 상태를 관리하는 법
+
+Vue의 `ref()`나 React의 `useState()`가 없으니, 상태 객체를 직접 정의하고 업데이트 로직을 만들어야 했습니다.
+
+```typescript
+interface State {
+  comments: Comment[];
+  totalCount: number;
+  currentPage: number;
+  totalPages: number;
+  isLoading: boolean;
+  error: Error | null;
+  expandedReplies: Set<string>;    // 펼쳐진 답글 목록
+  replyEditors: Set<string>;       // 열린 답글 작성 에디터
+  editingComment: string | null;   // 수정 중인 댓글 ID
+  stickerPopupVisible: boolean;    // 스티커 팝업 표시 여부
+}
+```
+
+상태 업데이트는 불변성을 유지하는 스프레드 패턴을 사용했습니다.
+
+```typescript
+private setState(partial: Partial<State>): void {
+  this.state = { ...this.state, ...partial };
+  this.emitter.emit(EVENTS.STATE_CHANGE, this.state);
+}
+```
+
+여기서 중요한 설계 판단이 있었습니다. **상태가 바뀔 때 자동으로 렌더링하지 않기로 한 것입니다.** React나 Vue에서는 상태 변경이 자동으로 리렌더링을 트리거하지만, 댓글 모듈에서는 상태 변경 시점과 렌더링 시점이 항상 일치하지 않았습니다. 예를 들어, 좋아요를 누르면 상태는 업데이트하되 전체 목록을 다시 그리지 않고 해당 버튼만 변경해야 했습니다. 자동 렌더링을 적용했다면 이런 부분 업데이트가 어려워졌을 것입니다.
+
+### 렌더링: 전체 갱신과 부분 업데이트
+
+렌더링은 4단계 파이프라인으로 구성했습니다.
+
+```typescript
+private render(): void {
+  this.renderHeader();      // "댓글 N개"
+  this.renderEditor();      // 댓글 작성 폼
+  this.renderList();        // 댓글 목록
+  this.renderPagination();  // 페이지 버튼
+}
+```
+
+댓글 작성이나 페이지 변경처럼 목록 전체가 바뀌는 경우에는 이 파이프라인을 실행합니다. 문제는 `renderList()`가 `innerHTML`로 목록 전체를 교체하기 때문에, 이전에 펼쳐 놓은 답글이 사라진다는 점이었습니다.
+
+이를 해결하기 위해 렌더링 후 `expandedReplies` Set에 기록된 답글들을 다시 로드하는 복원 로직을 추가했습니다.
+
+```typescript
+private renderList(): void {
+  // ... 댓글 목록 HTML 생성 후 삽입 ...
+  this.elements.listWrapper.innerHTML = commentsHtml;
+
+  // 이전에 펼쳐져 있던 답글 복원
+  this.state.expandedReplies.forEach((commentId) => {
+    this.loadReplies(commentId);
+  });
+}
+```
+
+메모리에 저장된 상태(`expandedReplies`)와 DOM이 분리되어 있기 때문에, DOM이 교체되더라도 상태를 기반으로 UI를 복원할 수 있습니다. 프레임워크의 가상 DOM이 자동으로 해주는 일을 직접 구현한 셈입니다.
+
+반면 좋아요처럼 빈번하게 발생하는 인터랙션은 전체 렌더링 없이 해당 요소만 직접 업데이트했습니다.
+
+```typescript
+private async toggleLike(commentId: string, buttonEl: HTMLElement): Promise<void> {
+  const updated = isLiked
+    ? await this.api.unlikeComment(commentId)
+    : await this.api.likeComment(commentId);
+
+  // DOM을 먼저 업데이트하고, 상태는 그 뒤에 동기화
+  const iconEl = buttonEl.querySelector(`.${prefix}-like-icon`);
+  if (iconEl) {
+    iconEl.innerHTML = updated.isLiked ? '&#9829;' : '&#9825;';
+  }
+  const countEl = buttonEl.querySelector(`.${prefix}-like-count`);
+  if (countEl) {
+    countEl.textContent = updated.likeCount > 0 ? String(updated.likeCount) : '';
+  }
+
+  // 상태 동기화 (렌더링은 하지 않음)
+  const comments = this.state.comments.map((c) =>
+    c.id === commentId ? { ...c, likeCount: updated.likeCount, isLiked: updated.isLiked } : c
+  );
+  this.setState({ comments });
+}
+```
+
+이 방식은 DOM 업데이트와 상태 업데이트의 순서를 명시적으로 제어할 수 있다는 장점이 있지만, 둘 사이의 일관성을 개발자가 직접 보장해야 한다는 부담이 있습니다.
+
+### 인라인 수정에서 겪은 문제: 에디터 충돌
+
+댓글을 제자리에서 수정하는 인라인 수정 기능을 구현할 때 예상치 못한 문제를 겪었습니다. 댓글 수정 에디터와 답글 작성 에디터가 동시에 열리면 레이아웃이 깨지고, 사용자가 어디에 입력하고 있는지 혼란스러워지는 상황이 발생한 것입니다.
+
+이를 해결하기 위해 **수정 에디터와 답글 에디터를 상호 배타적으로** 만들었습니다.
+
+```typescript
+private startEdit(commentId: string): void {
+  //... (변수 선언 생략)
+
+  // 이미 수정 중인 댓글이 있으면 취소
+  if (this.state.editingComment) {
+    this.cancelEdit(this.state.editingComment);
+  }
+
+  // 열려 있는 답글 에디터를 모두 닫기
+  for (const parentId of this.state.replyEditors) {
+    this.hideReplyEditor(parentId);
+  }
+
+  // 댓글 내용 영역을 에디터로 교체
+  const contentEl = commentEl.querySelector(`.${prefix}-comment-content`);
+  contentEl.dataset.originalHtml = contentEl.innerHTML; // 원본 저장
+  contentEl.innerHTML = editorTemplate(prefix, messages, {
+    mode: 'edit',
+    initialValue: contentEl.dataset.rawContent,
+    commentId,
+  });
+
+  // 포커스 + 커서를 텍스트 끝으로 이동
+  const textarea = contentEl.querySelector(`.${prefix}-editor-textarea`);
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+}
+```
+
+수정을 취소하면 `dataset.originalHtml`에 저장해 둔 원본 HTML을 복원합니다. 이 패턴은 프레임워크의 상태 기반 렌더링 대신 **DOM 자체를 백업/복원**하는 방식입니다.
+
+답글 에디터를 열 때도 동일한 상호 배타 로직이 동작합니다.
+
+```typescript
+private showReplyEditor(parentId: string): void {
+  // 수정 중인 댓글이 있으면 취소
+  if (this.state.editingComment) {
+    this.cancelEdit(this.state.editingComment);
+  }
+  // ... 답글 에디터 표시 ...
+}
+```
+
+`state.editingComment`(단일 값)과 `state.replyEditors`(Set)를 통해 현재 열린 에디터를 추적하고, 새 에디터를 열기 전에 기존 에디터를 정리하는 패턴입니다.
+
+### 스티커 기능 설계
+
+권장 기능 중 하나로 스티커를 구현했습니다. 스티커는 텍스트와 혼합할 수 없고, 단독으로만 전송할 수 있도록 설계했습니다. 이 제약을 두자 UI 흐름이 명확해졌습니다.
+
+```typescript
+interface StickerConfig {
+  enabled: boolean;
+  groups: StickerGroup[];          // 스티커 그룹(팩) 목록
+  onStickerPurchase?: () => void;  // 빈 그룹일 때 구매 유도 콜백
+}
+```
+
+스티커 선택 흐름은 다음과 같습니다.
+
+1. 에디터의 스티커 버튼을 클릭하면 팝업이 열립니다.
+2. 팝업 상단에 그룹별 탭이 표시되고, 탭을 전환하면 해당 그룹의 스티커 그리드가 나타납니다.
+3. 스티커를 선택하면 팝업이 닫히고, textarea가 사라지며 스티커 미리보기가 표시됩니다.
+4. 등록 버튼을 누르면 스티커 데이터가 전송됩니다.
+
+핵심은 textarea와 스티커 미리보기의 상호 배타성입니다. 스티커를 선택하면 textarea를 숨기고 비활성화합니다.
+
+```typescript
+private handleStickerSelect(stickerEl: HTMLElement): void {
+  // ... (변수 선언 생략)
+
+  // textarea 숨김 + 비활성화
+  if (textarea) {
+    hide(textarea);
+    textarea.disabled = true;
+  }
+
+  // 스티커 미리보기 표시 + 메타데이터 저장
+  if (preview && previewImg) {
+    previewImg.src = imageUrl;
+    preview.dataset.stickerPackId = packId;
+    preview.dataset.stickerId = stickerId;
+    preview.dataset.stickerImageUrl = imageUrl;
+    show(preview);
+  }
+
+  this.closeStickerPopup();
+}
+```
+
+전송 시에는 미리보기 영역의 `hidden` 속성과 `dataset`을 확인하여 텍스트 댓글인지 스티커 댓글인지 판별합니다.
+
+```typescript
+const stickerData = preview && !preview.hasAttribute('hidden')
+  ? {
+      packId: preview.dataset.stickerPackId,
+      stickerId: preview.dataset.stickerId,
+      imageUrl: preview.dataset.stickerImageUrl,
+    }
+  : undefined;
+
+const content = stickerData ? '' : textarea?.value.trim();
+
+// 텍스트도 스티커도 없으면 전송하지 않음
+if (!content && !stickerData) return;
+```
+
+스티커 댓글은 목록에서 이미지로 표시되며, 수정이 불가능하고 삭제만 가능합니다.
+
+스티커 팝업에서 까다로웠던 부분은 외부 클릭 감지였습니다. 팝업 내부, 스티커 버튼, 그 외 영역을 구분해야 했고, 메인 에디터·답글 에디터·수정 에디터에 각각 스티커 버튼이 있을 수 있어 모든 버튼을 순회하며 확인해야 했습니다.
+
+```typescript
+const cleanupOutsideClick = addEvent(document.body, 'click', (e) => {
+  if (!this.state.stickerPopupVisible) return;
+  const popup = this.container.querySelector(`.${prefix}-sticker-popup`);
+  const target = e.target as Node;
+
+  if (popup?.contains(target)) return;  // 팝업 내부 클릭
+
+  const btns = this.container.querySelectorAll(`.${prefix}-sticker-btn`);
+  for (const btn of btns) {
+    if (btn.contains(target)) return;   // 스티커 버튼 클릭
+  }
+
+  this.closeStickerPopup();             // 그 외 → 팝업 닫기
+});
+this.cleanupFunctions.push(cleanupOutsideClick);
 ```
 
 ## 빌드와 배포
@@ -330,42 +507,61 @@ Vite의 라이브러리 모드를 활용하여 ES Module, UMD, CommonJS 세 가�
 ```typescript
 // vite.config.ts
 export default defineConfig({
+  plugins: [dts({ insertTypesEntry: true, rollupTypes: true })],
   build: {
     lib: {
-      entry: 'src/index.ts',
-      name: 'CommentBox',
-      formats: ['es', 'umd', 'cjs'],
+      entry: resolve(__dirname, "src/index.ts"),
+      name: "CommentBox",
+      formats: ["es", "umd", "cjs"],
       fileName: (format) => `comment-box.${format}.js`,
     },
+    rollupOptions: {
+      output: {
+        assetFileNames: "comment-box.[ext]",  // CSS 파일명 지정
+        exports: "named",
+      },
+    },
+    sourcemap: true,
+    minify: "terser",
   },
 });
 ```
 
-배포는 GitHub Packages를 사용했습니다. `npm version patch && npm publish` 명령으로 버전을 올리고 배포하면, 소비자 프로젝트에서 `npm install @ogqcorp/comment-box`로 설치할 수 있습니다.
+`vite-plugin-dts`로 TypeScript 타입 정의 파일도 함께 생성하여, 소비자 프로젝트에서 타입 지원을 받을 수 있게 했습니다.
+
+배포는 GitHub Packages를 사용했습니다. `npm version patch && npm publish` 명령으로 버전을 올리고 배포하면, 소비자 프로젝트에서 `npm install @my-org/comment-box`로 설치할 수 있습니다.
 
 개발 단계에서는 `npm link`를 활용해 로컬 빌드 결과물을 소비자 프로젝트에 즉시 반영하며 작업했습니다.
 
-## Nuxt 3 통합
+## Nuxt 3 통합에서 겪은 것들
 
 ### SSR 회피
 
-Vanilla JS 모듈은 DOM API에 의존하므로 서버 사이드에서 실행하면 에러가 발생합니다. Nuxt 3의 `import.meta.client` 가드로 클라이언트 환경에서만 모듈을 로드했습니다.
+Vanilla JS 모듈은 DOM API에 의존하므로 서버 사이드에서 실행하면 `document is not defined` 에러가 발생합니다. 처음에는 Nuxt의 `<ClientOnly>` 컴포넌트를 사용했지만, 댓글 모듈 초기화 타이밍을 세밀하게 제어하기 어려웠습니다. 결국 `import.meta.client` 가드로 모듈 로딩 자체를 클라이언트로 제한하는 방식을 택했습니다.
 
 ```javascript
 let CommentBox = null;
 let HttpAPI = null;
 
 if (import.meta.client) {
-  const mod = await import('@ogqcorp/comment-box');
+  const mod = await import("@my-org/comment-box");
   CommentBox = mod.default || mod.CommentBox;
   HttpAPI = mod.HttpAPI;
-  await import('@ogqcorp/comment-box/style.css');
+  await import("@my-org/comment-box/style.css");
 }
 ```
 
-### Mock 서버 API 구성
+CSS도 동적 import로 가져오는 이유는, 모듈 내부의 SCSS가 빌드 시 CSS로 컴파일되어 별도 파일로 제공되기 때문입니다. 서버 사이드에서 CSS를 import하면 의미 없는 로딩이 발생하므로, JS와 함께 클라이언트에서만 로드합니다.
 
-백엔드 API가 준비되기 전까지 Nuxt 서버 API 라우트로 Mock 서버를 구성했습니다. `HttpAPI` 구현체가 호출하�� 엔드포인트와 동일한 경로에 핸들러를 만들어, 프론트엔드 코드 변경 없이 나중에 실제 서버로 전환할 수 있도록 했습니다.
+### npm link에서 패키지 배포로 전환
+
+개발 초기에는 `npm link`로 로컬 모듈을 연결했습니다. 그런데 `npm link`를 사용하면 Nuxt의 Vite 번들러가 심볼릭 링크를 제대로 처리하지 못하는 문제가 있었습니다. `nuxt.config.ts`에 `resolve.alias`, `optimizeDeps`, `ssr.noExternal` 등의 설정을 추가해야 했고, 이 설정들이 다른 모듈의 빌드에도 영향을 주는 부작용이 있었습니다.
+
+이 문제는 GitHub Packages로 정식 배포한 뒤 `npm install`로 설치하면서 깔끔하게 해결되었습니다. 이후로는 모듈을 수정할 때마다 `npm version patch && npm publish` → 소비자 프로젝트에서 `npm update` 사이클을 돌렸습니다.
+
+### Mock 서버와 HMR 충돌
+
+백엔드 API가 준비되기 전까지 Nuxt 서버 API 라우트로 Mock 서버를 구성했습니다. `HttpAPI` 구현체가 호출하는 엔드포인트와 동일한 경로에 핸들러를 만들어, 프론트엔드 코드 변경 없이 나중에 실제 서버로 전환할 수 있도록 했습니다.
 
 ```
 src/server/
@@ -382,7 +578,20 @@ src/server/
         └── unlike.post.ts       # POST /api/comments/:id/unlike
 ```
 
-처음에는 JSON 파일에 데이터를 저장했지만, Nuxt 개발 서버의 HMR(Hot Module Replacement)이 JSON 파일 변경을 감지하여 불필요한 리로드가 발생하는 문제가 있었습니다. 이를 해결하기 위해 서버 프로세스 메모리에 데이터를 저장하는 인메모리 방식으로 전환했습니다.
+처음에는 `src/server/data/comments.json` 파일에 데이터를 저장했습니다. 그런데 댓글을 작성할 때마다 JSON 파일이 변경되고, Nuxt 개발 서버의 HMR이 이를 감지하여 서버 전체가 리로드되었습니다. 댓글을 하나 작성하면 페이지가 새로고침되는 상황이 반복된 것입니다.
+
+해결은 단순했습니다. 파일 저장소를 서버 프로세스 메모리 변수로 교체했습니다.
+
+```typescript
+// commentStore.ts
+let store: Comment[] = []; // 서버 프로세스 메모리에 저장
+
+export function getAll() { return store; }
+export function add(comment: Comment) { store.unshift(comment); }
+// ...
+```
+
+메모리 저장소는 서버 재시작 시 데이터가 초기화되지만, 개발 단계에서는 오히려 편리했습니다.
 
 ### 인증 및 스티커 연동
 
@@ -390,27 +599,27 @@ src/server/
 
 ```typescript
 CommentBox.init({
-  container: '#comment-box',
-  objectId: notice.value.commentObjectId,
-  api: new HttpAPI('/api/comments'),
-  locale: 'ko',
-  isManager: props.connectedCreator,
+  container: "#comment-box",
+  objectId: targetObjectId,
+  api: new HttpAPI("/api/comments"),
+  locale: "ko",
+  isManager: props.isAuthor,
   auth: {
-    isLoggedIn: () => isAuthorizedUser.value,
+    isLoggedIn: () => authStore.isLoggedIn,
     getUserInfo: () => ({
-      id: getAuthUser.value.customerId,
-      nickname: getAuthUser.value.nickname,
-      profileUrl: getAuthUser.value.profileUrl,
+      id: authStore.user.id,
+      nickname: authStore.user.nickname,
+      profileUrl: authStore.user.profileUrl,
     }),
     onLoginRequired: () => {
-      permissionCheck(); // 기존 로그인 유도 로직 재사용
+      authStore.requireLogin();
     },
   },
   sticker: {
     enabled: true,
     groups: stickerGroups,
     onStickerPurchase: () => {
-      navigateTo('/artworks/sticker');
+      navigateTo("/store/sticker");
     },
   },
 });
@@ -422,9 +631,11 @@ CommentBox.init({
 
 이번 작업을 통해 외부 서비스 종료라는 상황에서 자체 모듈을 설계하고 개발하는 경험을 할 수 있었습니다. 특히 "어떤 프레임워크에서든 동작해야 한다"는 요구사항이 Vanilla JS 선택, API 추상화, 콜백 기반 인터페이스 등 여러 설계 결정의 출발점이 되었습니다.
 
-프레임워크 없이 개발하면서 상태 관리, 이벤트 핸들링, DOM 업데이트 등 프레임워크가 추상화해주는 영역들을 직접 다루게 되었는데, 이 과정이 프레임워크의 동작 원리를 더 깊이 이해하는 계기가 되기도 했습니다.
+프레임워크 없이 개발하면서 상태 관리, 이벤트 핸들링, DOM 업데이트 등 프레임워크가 추상화해주는 영역들을 직접 다루게 되었는데, 이 과정이 프레임워크의 동작 원리를 더 깊이 이해하는 계기가 되기도 했습니다. 수정/답글 에디터 충돌, `innerHTML` 교체 시 상태 유실, 스티커 팝업의 외부 클릭 처리 등 프레임워크에서는 의식하지 않았던 문제들을 직접 해결하면서, 프레임워크가 많은 부분을 자동으로 처리해주고 있었다는 것을 체감할 수 있었습니다.
 
-현재는 Mock 서버로 동작하고 있으며, 실제 백엔드 API 연동 후 기존 네이버 댓글 모듈을 완전히 대체할 예정입니다. API 인터페이스가 동일하게 설계되어 있으므로, `HttpAPI`의 base URL만 변경하면 전환이 완료됩니다.
+한 가지 아쉬운 점은 테스트입니다. Vitest와 jsdom 환경은 구성해 두었지만, 아직 테스트 코드를 작성하지 못했습니다. MockAPI가 외부 의존성 없이 동작하므로 단위 테스트에 유리한 구조인 만큼, 백엔드 API 연동 전에 핵심 기능의 테스트를 추가할 계획입니다.
+
+현재는 Mock 서버로 동작하고 있으며, 실제 백엔드 API 연동 후 기존 A사 댓글 모듈을 완전히 대체할 예정입니다. API 인터페이스가 동일하게 설계되어 있으므로, `HttpAPI`의 base URL만 변경하면 전환이 완료됩니다.
 
 ## 참고 자료
 
