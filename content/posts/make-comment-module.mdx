@@ -1,7 +1,7 @@
 ---
 title: "A사 댓글 종료 대응, Vanilla JS 댓글 모듈 자체 개발기"
 description: "A사 댓글 모듈 종료에 대응하여, 프레임워크 독립적인 Vanilla JS 댓글 모듈을 설계·개발하고 기존에 서비스 중이던 Nuxt 3 프로젝트에 통합한 과정을 공유합니다."
-date: "2026-01-30"
+date: "2026-01-31"
 tags: ["javascript", "architecture"]
 slug: "make-comment-module"
 ---
@@ -81,7 +81,7 @@ useEffect(() => {
 
 **2. 외부 의존성 최소화**
 
-프레임워크 기반 컴포넌트는 해당 프레임워크를 런타임 의존성으로 가져가야 합니다. 반면 Vanilla JS 모듈의 프로덕션 의존성은 XSS 방지를 위한 DOMPurify 단 하나뿐입니다. 번들 크기가 작고, 소비자 프로젝트의 프레임워크 버전 업그레이드에도 영향을 받지 않습니다.
+프레임워크 기반 컴포넌트는 해당 프레임워크를 런타임 의존성으로 가져가야 합니다. 반면 Vanilla JS 모듈의 프로덕션 의존성은 XSS 방지를 위한 DOMPurify 단 하나뿐입니다. 번들 크기가 작고, 각 프로젝트의 프레임워크 버전 업그레이드에도 영향을 받지 않습니다.
 
 **3. 기존 A사 모듈과 동일한 통합 방식**
 
@@ -202,11 +202,11 @@ CommentBox.init({
 });
 ```
 
-소비자 코드에서 API 구현체만 교체하면 동작이 전환됩니다. 이 덕분에 백엔드 개발과 프론트엔드 개발을 완전히 병렬로 진행할 수 있었습니다.
+호출 코드에서 API 구현체만 교체하면 동작이 전환됩니다. 이 덕분에 백엔드 개발과 프론트엔드 개발을 완전히 병렬로 진행할 수 있었습니다.
 
 ### CSS 변수 기반 테마
 
-소비자 프로젝트마다 디자인 시스템이 다르므로, CSS 변수를 통해 스타일을 오버라이딩할 수 있도록 설계했습니다.
+프로젝트마다 디자인 시스템이 다르므로, CSS 변수를 통해 스타일을 오버라이딩할 수 있도록 설계했습니다.
 
 ```scss
 :root {
@@ -227,7 +227,7 @@ CommentBox.init({
 }
 ```
 
-소비자 프로젝트에서는 CSS 변수만 덮어쓰면 됩니다. 실제로 Nuxt 프로젝트에 통합할 때 아래와 같이 서비스 디자인 시스템에 맞게 오버라이딩했습니다.
+각 프로젝트에서는 CSS 변수만 덮어쓰면 됩니다. 실제로 Nuxt 프로젝트에 통합할 때 아래와 같이 서비스 디자인 시스템에 맞게 오버라이딩했습니다.
 
 ```scss
 // src/assets/scss/_comment-box.scss
@@ -537,11 +537,11 @@ export default defineConfig({
 });
 ```
 
-`vite-plugin-dts`로 TypeScript 타입 정의 파일도 함께 생성하여, 소비자 프로젝트에서 타입 지원을 받을 수 있게 했습니다.
+`vite-plugin-dts`로 TypeScript 타입 정의 파일도 함께 생성하여, 다른 프로젝트에서 타입 지원을 받을 수 있게 했습니다.
 
-배포는 GitHub Packages를 사용했습니다. `npm version patch && npm publish` 명령으로 버전을 올리고 배포하면, 소비자 프로젝트에서 `npm install @my-org/comment-box`로 설치할 수 있습니다.
+배포는 GitHub Packages를 사용했습니다. `npm version patch && npm publish` 명령으로 버전을 올리고 배포하면, 각 프로젝트에서 `npm install @my-org/comment-box`로 설치할 수 있습니다.
 
-개발 단계에서는 `npm link`를 활용해 로컬 빌드 결과물을 소비자 프로젝트에 즉시 반영하며 작업했습니다.
+개발 단계에서는 `npm link`를 활용해 로컬 빌드 결과물을 연동 프로젝트에 즉시 반영하며 작업했습니다.
 
 ## Nuxt 3 통합에서 겪은 것들
 
@@ -567,7 +567,7 @@ CSS도 동적 import로 가져오는 이유는, 모듈 내부의 SCSS가 빌드 
 
 개발 초기에는 `npm link`로 로컬 모듈을 연결했습니다. 그런데 `npm link`를 사용하면 Nuxt의 Vite 번들러가 심볼릭 링크를 제대로 처리하지 못하는 문제가 있었습니다. `nuxt.config.ts`에 `resolve.alias`, `optimizeDeps`, `ssr.noExternal` 등의 설정을 추가해야 했고, 이 설정들이 다른 모듈의 빌드에도 영향을 주는 부작용이 있었습니다.
 
-이 문제는 GitHub Packages로 정식 배포한 뒤 `npm install`로 설치하면서 깔끔하게 해결되었습니다. 이후로는 모듈을 수정할 때마다 `npm version patch && npm publish` → 소비자 프로젝트에서 `npm update` 사이클을 돌렸습니다.
+이 문제는 GitHub Packages로 정식 배포한 뒤 `npm install`로 설치하면서 깔끔하게 해결되었습니다. 이후로는 모듈을 수정할 때마다 `npm version patch && npm publish` → 각 프로젝트에서 `npm update` 사이클을 돌렸습니다.
 
 ### Mock 서버와 HMR 충돌
 
@@ -639,7 +639,7 @@ CommentBox.init({
 });
 ```
 
-콜백 기반 인터페이스 덕분에 모듈 내부에서는 인증 구현체를 전혀 알 필요가 없고, 소비자 프로젝트가 자체 인증 방식을 주입하는 구조입니다.
+콜백 기반 인터페이스 덕분에 모듈 내부에서는 인증 구현체를 전혀 알 필요가 없고, 각 프로젝트가 자체 인증 방식을 주입하는 구조입니다.
 
 ## 마치며
 
