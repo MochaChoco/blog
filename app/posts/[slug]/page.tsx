@@ -16,6 +16,7 @@ import { ShareButtons } from "@/components/share-buttons";
 import { RelatedPosts } from "@/components/related-posts";
 import { extractToc, createHeadingSlugger } from "@/lib/toc";
 import { MobileToc, TableOfContents } from "@/components/table-of-contents";
+import { FlickeringGrid } from "@/components/magicui/flickering-grid";
 
 export async function generateStaticParams() {
   const posts = await getAllPosts();
@@ -139,7 +140,6 @@ export default async function PostPage({
   const hasToc = tocItems.length > 0;
   const headingSlugger = createHeadingSlugger();
   const components = {
-    // Simple Override for Pre to include Copy Button
     pre: ({ children, className, ...props }: ComponentPropsWithoutRef<"pre">) => (
       <div className="relative group print:static">
         <pre
@@ -157,12 +157,10 @@ export default async function PostPage({
         />
       </div>
     ),
-    // Override img to handle basePath for static exports
     img: ({ src, alt, ...props }: ComponentPropsWithoutRef<"img">) => {
       const imageSrc = typeof src === "string" ? withBasePath(src) : src;
       return <img src={imageSrc} alt={alt || ""} {...props} />;
     },
-    // Open MDX links in a new tab by default (except in-page anchors like #section).
     a: ({ href, children, ...props }: ComponentPropsWithoutRef<"a">) => {
       const resolvedHref =
         typeof href === "string" ? withBasePath(href) : href;
@@ -185,69 +183,84 @@ export default async function PostPage({
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-      <article
-        className={cn(
-          "grid grid-cols-1 gap-10",
-          hasToc && "lg:grid-cols-[minmax(0,1fr)_220px]"
-        )}
-      >
-        <div>
-          <div className="space-y-4 mb-10 text-center">
-            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
-              {post.frontmatter.title}
-            </h1>
-            <time className="block text-muted-foreground">
-              {formatDate(post.frontmatter.date)}
-            </time>
-            <div className="flex flex-wrap justify-center gap-2 text-sm text-muted-foreground print:hidden">
-              {post.frontmatter.tags?.map((tag) => (
-                <Link
-                  key={tag}
-                  href={`/tags/${tag}`}
-                  className="bg-secondary px-2 py-1 rounded-md hover:bg-secondary/80 transition-colors"
-                >
-                  #{tag}
-                </Link>
-              ))}
-            </div>
-            <div className="flex justify-center mt-4">
-              <ShareButtons title={post.frontmatter.title} url={postUrl} />
-            </div>
+    <div>
+      {/* Hero Header */}
+      <div className="relative overflow-hidden border-b">
+        <FlickeringGrid
+          className="absolute inset-0 z-0 [mask-image:radial-gradient(ellipse_at_center,white,transparent_80%)]"
+          squareSize={4}
+          gridGap={6}
+          color="rgb(0, 0, 0)"
+          maxOpacity={0.15}
+          flickerChance={0.1}
+        />
+        <div className="relative z-10 mx-auto max-w-7xl px-6 py-16 md:py-24">
+          <div className="flex flex-wrap gap-2 text-sm print:hidden">
+            {post.frontmatter.tags?.map((tag) => (
+              <Link
+                key={tag}
+                href={`/tags/${tag}`}
+                className="rounded-full bg-muted px-3 py-1 text-muted-foreground hover:bg-muted/80 transition-colors"
+              >
+                {tag}
+              </Link>
+            ))}
           </div>
-          <div className="prose prose-sm max-w-none prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-a:text-blue-600 dark:prose-a:text-blue-400 dark:prose-invert sm:prose-base">
-            <MDXRemote
-              source={post.content}
-              components={components}
-              options={{
-                mdxOptions: {
-                  rehypePlugins: [
-                    [
-                      rehypePrettyCode,
-                      {
-                        theme: "one-dark-pro",
-                        keepBackground: true,
-                      },
-                    ],
-                    rehypeBasePath,
-                  ],
-                },
-              }}
-            />
+          <time className="mt-4 block text-sm text-muted-foreground">
+            {formatDate(post.frontmatter.date)}
+          </time>
+          <h1 className="mt-4 text-4xl font-medium tracking-tighter md:text-5xl lg:text-6xl">
+            {post.frontmatter.title}
+          </h1>
+          <div className="mt-6 print:hidden">
+            <ShareButtons title={post.frontmatter.title} url={postUrl} />
           </div>
-          <PostNavigation prev={prev} next={next} />
-          <RelatedPosts posts={relatedPosts} />
-          <ScrollToTop />
         </div>
-        {hasToc && (
-          <aside className="hidden lg:block">
-            <div className="sticky top-24">
-              <TableOfContents items={tocItems} />
+      </div>
+
+      {/* Content */}
+      <div className="mx-auto max-w-7xl px-6 py-8 sm:py-10">
+        <article
+          className={cn(
+            "grid grid-cols-1 gap-10",
+            hasToc && "lg:grid-cols-[minmax(0,1fr)_220px]"
+          )}
+        >
+          <div>
+            <div className="prose prose-sm max-w-none prose-headings:font-semibold prose-headings:tracking-tight prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-a:text-foreground prose-a:underline dark:prose-invert sm:prose-base">
+              <MDXRemote
+                source={post.content}
+                components={components}
+                options={{
+                  mdxOptions: {
+                    rehypePlugins: [
+                      [
+                        rehypePrettyCode,
+                        {
+                          theme: "one-dark-pro",
+                          keepBackground: true,
+                        },
+                      ],
+                      rehypeBasePath,
+                    ],
+                  },
+                }}
+              />
             </div>
-          </aside>
-        )}
-      </article>
-      {hasToc && <MobileToc items={tocItems} />}
+            <PostNavigation prev={prev} next={next} />
+            <RelatedPosts posts={relatedPosts} />
+            <ScrollToTop />
+          </div>
+          {hasToc && (
+            <aside className="hidden lg:block">
+              <div className="sticky top-20 rounded-lg bg-muted/60 p-4">
+                <TableOfContents items={tocItems} />
+              </div>
+            </aside>
+          )}
+        </article>
+        {hasToc && <MobileToc items={tocItems} />}
+      </div>
     </div>
   );
 }

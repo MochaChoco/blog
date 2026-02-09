@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers";
 import { Header } from "@/components/header";
@@ -17,12 +19,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" suppressHydrationWarning>
+    <html lang="ko" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap"
           rel="stylesheet"
         />
       </head>
@@ -35,11 +37,13 @@ export default function RootLayout({
         >
           <div className="min-h-screen flex flex-col">
             <Header />
-            <main className="flex-1 container mx-auto px-4 py-8">
+            <main className="flex-1">
               {children}
             </main>
-            <footer className="border-t py-6 text-center text-sm text-muted-foreground print:hidden">
-              © {new Date().getFullYear()} My Tech Blog. All rights reserved.
+            <footer className="border-t print:hidden">
+              <div className="mx-auto max-w-7xl px-6 py-6 text-center text-sm text-muted-foreground">
+                © {new Date().getFullYear()} MochaChoco&apos;s DevBlog. All rights reserved.
+              </div>
             </footer>
           </div>
         </ThemeProvider>

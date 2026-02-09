@@ -3,23 +3,23 @@ import { ThemeToggle } from "./theme-toggle";
 
 export function Header() {
   return (
-    <header className="border-b print:hidden">
-      <div className="container mx-auto px-4 py-3 sm:py-0 sm:h-16 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Link href="/" className="font-bold text-xl">
-          MochaChoco's DevBlog
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 print:hidden">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+        <Link href="/" className="font-bold text-lg tracking-tight">
+          MochaChoco&apos;s DevBlog
         </Link>
-        <nav className="flex flex-wrap items-center gap-3 text-sm sm:gap-6 sm:text-base">
-          <Link href="/posts" className="hover:text-primary transition-colors">
+        <nav className="flex items-center gap-6 text-sm">
+          <Link href="/posts" className="text-muted-foreground hover:text-foreground transition-colors">
             Posts
           </Link>
-          <Link href="/tags" className="hover:text-primary transition-colors">
+          <Link href="/tags" className="text-muted-foreground hover:text-foreground transition-colors">
             Tags
           </Link>
-          <Link href="/search" className="hover:text-primary transition-colors">
+          <Link href="/search" className="text-muted-foreground hover:text-foreground transition-colors">
             Search
           </Link>
-          <Link href="/about" className="hover:text-primary transition-colors">
-            About Me
+          <Link href="/about" className="text-muted-foreground hover:text-foreground transition-colors">
+            About
           </Link>
           <ThemeToggle />
         </nav>
